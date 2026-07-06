@@ -1034,65 +1034,69 @@ def main():
             if 'predictions' in st.session_state and st.session_state['predictions']:
                 st.markdown("### 🎯 Resultados del Análisis")
                 
-                for model_name, result in st.session_state['predictions'].items():
-                    disease = result['prediction']
-                    confidence = result['confidence']
-                    time_taken = result['inference_time']
-                    
-                    # Card para cada modelo
-                    st.markdown(f"""
-                    <div class="model-card">
-                        <h4>🤖 {model_name}</h4>
-                        <div class="prediction-box">
-                            <strong>Diagnóstico:</strong> {DISEASE_INFO[disease]['es']}<br>
-                            <strong>Confianza:</strong> {confidence:.2%}<br>
-                            <strong>Severidad:</strong> {DISEASE_INFO[disease]['severity']}<br>
-                            <strong>Tiempo:</strong> {time_taken:.3f}s
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    if disease in TREATMENT_INFO:
-                        treat = TREATMENT_INFO[disease]
+                model_names = list(st.session_state['predictions'].keys())
+                model_tabs = st.tabs(model_names)
+                
+                for tab, (model_name, result) in zip(model_tabs, st.session_state['predictions'].items()):
+                    with tab:
+                        disease = result['prediction']
+                        confidence = result['confidence']
+                        time_taken = result['inference_time']
+                        
+                        # Card para cada modelo
                         st.markdown(f"""
-                        <div style="background: rgba(46, 204, 113, 0.15); padding: 1.5rem; border-radius: 10px; margin-top: 10px; border-left: 5px solid #2ecc71; margin-bottom: 20px;">
-                            <h4 style="color: #2ecc71; margin-top: 0;">📋 Plan de Acción (Recomendación)</h4>
-                            <p style="margin-bottom: 5px;">💧 <b>Riego:</b> {treat['water']}</p>
-                            <p style="margin-bottom: 5px;">🧪 <b>Tratamiento:</b> {treat['chem']}</p>
-                            <p style="margin-bottom: 0;">🛡️ <b>Prevención:</b> {treat['prev']}</p>
+                        <div class="model-card">
+                            <h4>🤖 {model_name}</h4>
+                            <div class="prediction-box">
+                                <strong>Diagnóstico:</strong> {DISEASE_INFO[disease]['es']}<br>
+                                <strong>Confianza:</strong> {confidence:.2%}<br>
+                                <strong>Severidad:</strong> {DISEASE_INFO[disease]['severity']}<br>
+                                <strong>Tiempo:</strong> {time_taken:.3f}s
+                            </div>
                         </div>
                         """, unsafe_allow_html=True)
                         
-                    if 'gradcams' in st.session_state and model_name in st.session_state['gradcams'] and st.session_state['gradcams'][model_name]:
-                        st.markdown("#### 🔍 Análisis de Calor (Grad-CAM)")
-                        st.markdown("<p style='font-size: 0.9rem; color: #aaa;'>Mueve el deslizador para ver exactamente qué partes de la hoja utilizó la IA para tomar su decisión.</p>", unsafe_allow_html=True)
-                        cam_img = st.session_state['gradcams'][model_name]
-                        orig_resized = image.resize(cam_img.size)
-                        image_comparison(
-                            img1=orig_resized,
-                            img2=cam_img,
-                            label1="Original",
-                            label2="Atención IA",
-                            width=500
-                        )
-                    
-                    # Mostrar todas las probabilidades si está activado
-                    if show_probs:
-                        probs_df = pd.DataFrame({
-                            'Enfermedad': [DISEASE_INFO[cls]['es'] for cls in DISEASE_CLASSES],
-                            'Probabilidad': result['probabilities']
-                        }).sort_values('Probabilidad', ascending=False)
+                        if disease in TREATMENT_INFO:
+                            treat = TREATMENT_INFO[disease]
+                            st.markdown(f"""
+                            <div style="background: rgba(46, 204, 113, 0.15); padding: 1.5rem; border-radius: 10px; margin-top: 10px; border-left: 5px solid #2ecc71; margin-bottom: 20px;">
+                                <h4 style="color: #2ecc71; margin-top: 0;">📋 Plan de Acción (Recomendación)</h4>
+                                <p style="margin-bottom: 5px;">💧 <b>Riego:</b> {treat['water']}</p>
+                                <p style="margin-bottom: 5px;">🧪 <b>Tratamiento:</b> {treat['chem']}</p>
+                                <p style="margin-bottom: 0;">🛡️ <b>Prevención:</b> {treat['prev']}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        if 'gradcams' in st.session_state and model_name in st.session_state['gradcams'] and st.session_state['gradcams'][model_name]:
+                            st.markdown("#### 🔍 Análisis de Calor (Grad-CAM)")
+                            st.markdown("<p style='font-size: 0.9rem; color: #aaa;'>Mueve el deslizador para ver exactamente qué partes de la hoja utilizó la IA para tomar su decisión.</p>", unsafe_allow_html=True)
+                            cam_img = st.session_state['gradcams'][model_name]
+                            orig_resized = image.resize(cam_img.size)
+                            image_comparison(
+                                img1=orig_resized,
+                                img2=cam_img,
+                                label1="Original",
+                                label2="Atención IA",
+                                width=500
+                            )
                         
-                        fig = px.bar(
-                            probs_df.head(5), 
-                            x='Probabilidad', 
-                            y='Enfermedad',
-                            orientation='h',
-                            color='Probabilidad',
-                            color_continuous_scale='viridis'
-                        )
-                        fig.update_layout(height=300, showlegend=False)
-                        st.plotly_chart(fig, use_container_width=True)
+                        # Mostrar todas las probabilidades si está activado
+                        if show_probs:
+                            probs_df = pd.DataFrame({
+                                'Enfermedad': [DISEASE_INFO[cls]['es'] for cls in DISEASE_CLASSES],
+                                'Probabilidad': result['probabilities']
+                            }).sort_values('Probabilidad', ascending=False)
+                            
+                            fig = px.bar(
+                                probs_df.head(5), 
+                                x='Probabilidad', 
+                                y='Enfermedad',
+                                orientation='h',
+                                color='Probabilidad',
+                                color_continuous_scale='viridis'
+                            )
+                            fig.update_layout(height=300, showlegend=False)
+                            st.plotly_chart(fig, use_container_width=True)
     
     with tab2:
         if 'predictions' in st.session_state and st.session_state['predictions']:
