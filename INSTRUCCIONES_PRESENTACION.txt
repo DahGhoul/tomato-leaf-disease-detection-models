@@ -1,0 +1,34 @@
+=======================================================
+ GUÍA RÁPIDA DE PRESENTACIÓN - TOMATISMO (DOCKER)
+=======================================================
+
+¡Hola! Has preparado el USB para tu presentación. 
+Todo está configurado para que puedas correr la aplicación
+en la PC de tu profesor sin descargar nada de internet.
+
+--- PASOS PARA INICIAR EL SISTEMA ---
+
+1. Conecta este USB en la computadora de la escuela/profesor.
+2. Abre la terminal o PowerShell y navega hasta esta carpeta en el USB.
+   (Por ejemplo, escribe:  cd E:\Tomatismo )
+3. Carga la imagen de Docker desde el archivo (tardará unos segundos, ¡no usa internet!):
+   
+   docker load -i tomatismo_imagen.tar
+
+4. Levanta el servidor usando docker-compose:
+   
+   docker-compose up -d
+
+5. Abre tu navegador web y entra a esta dirección:
+   
+   http://localhost:8501
+
+¡LISTO! La aplicación se mostrará con el nuevo mapa de calor (Grad-CAM),
+el filtro anti-engaños y las tarjetas premium.
+
+--- PARA APAGAR EL SISTEMA AL TERMINAR ---
+Cuando termines tu presentación, apaga el servidor con este comando:
+
+   docker-compose down
+
+¡Mucho éxito en tu presentación!

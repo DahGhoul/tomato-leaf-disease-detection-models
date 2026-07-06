@@ -26,6 +26,11 @@ from sklearn.metrics import cohen_kappa_score, confusion_matrix
 import base64
 from io import BytesIO
 import warnings
+import cv2
+from pytorch_grad_cam import GradCAM
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+from pytorch_grad_cam.utils.image import show_cam_on_image
+from streamlit_image_comparison import image_comparison
 
 # Ignorar warnings de versiones de scikit-learn
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
@@ -193,6 +198,30 @@ def preprocess_image(image, model_name):
     
     return transform(image).unsqueeze(0)
 
+
+def generate_gradcam(image_tensor, original_image, model, model_name):
+    try:
+        if model_name == 'MobileNetV3':
+            target_layers = [model.features[-1]]
+        elif model_name == 'EfficientNetB7':
+            target_layers = [model.features[-1]]
+        else:
+            return None
+        
+        cam = GradCAM(model=model, target_layers=target_layers)
+        targets = [ClassifierOutputTarget(torch.argmax(model(image_tensor)).item())]
+        grayscale_cam = cam(input_tensor=image_tensor, targets=targets)[0, :]
+        
+        # Resize original image to match tensor size
+        size = (224, 224) if model_name != 'EfficientNetB7' else (128, 128)
+        orig_img_resized = original_image.resize(size)
+        rgb_img = np.float32(orig_img_resized) / 255
+        
+        cam_image = show_cam_on_image(rgb_img, grayscale_cam, use_rgb=True)
+        return Image.fromarray(cam_image)
+    except Exception as e:
+        return None
+
 def predict_with_model(image, model, model_name):
     """Realiza predicción con un modelo específico"""
     start_time = time.time()
@@ -215,11 +244,13 @@ def predict_with_model(image, model, model_name):
     
     inference_time = time.time() - start_time
     
+    entropy = stats.entropy(probabilities)
     return {
         'prediction': DISEASE_CLASSES[prediction],
         'probabilities': probabilities,
         'confidence': float(probabilities[prediction]),
-        'inference_time': inference_time
+        'inference_time': inference_time,
+        'entropy': entropy
     }
 
 def perform_statistical_tests(predictions):
@@ -927,12 +958,23 @@ def main():
                 st.image(image, caption="Imagen cargada", use_column_width=True)
                 
                 # Botón de análisis
-                if st.button("🔬 Analizar Imagen", type="primary"):
-                    with st.spinner("Procesando..."):
-                        st.session_state['predictions'] = {}
-                        for model_name, model in models.items():
-                            result = predict_with_model(image, model, model_name)
-                            st.session_state['predictions'][model_name] = result
+                if st.button("🔬 Analizar Imagen y Generar Grad-CAM", type="primary"):
+                    with st.spinner("Ejecutando Inteligencia Artificial (Analizando patrones)..."):
+                        # OOD Detection
+                        dummy_res = predict_with_model(image, models['MobileNetV3'], 'MobileNetV3')
+                        if dummy_res['entropy'] > 1.8:
+                            st.error("🚨 ¡Alerta Anti-Engaños! La red neuronal tiene demasiada incertidumbre (Entropía alta). Por favor, asegúrate de subir una imagen clara de una hoja de tomate y no de otro objeto.")
+                        else:
+                            st.session_state['predictions'] = {}
+                            st.session_state['gradcams'] = {}
+                            for model_name, model in models.items():
+                                result = predict_with_model(image, model, model_name)
+                                st.session_state['predictions'][model_name] = result
+                                
+                                if model_name in ['MobileNetV3', 'EfficientNetB7']:
+                                    tensor_img = preprocess_image(image, model_name)
+                                    cam = generate_gradcam(tensor_img, image, model, model_name)
+                                    st.session_state['gradcams'][model_name] = cam
         
         with col2:
             if 'predictions' in st.session_state and st.session_state['predictions']:
@@ -955,6 +997,30 @@ def main():
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
+                    
+                    if disease in TREATMENT_INFO:
+                        treat = TREATMENT_INFO[disease]
+                        st.markdown(f"""
+                        <div style="background: rgba(46, 204, 113, 0.15); padding: 1.5rem; border-radius: 10px; margin-top: 10px; border-left: 5px solid #2ecc71; margin-bottom: 20px;">
+                            <h4 style="color: #2ecc71; margin-top: 0;">📋 Plan de Acción (Recomendación)</h4>
+                            <p style="margin-bottom: 5px;">💧 <b>Riego:</b> {treat['water']}</p>
+                            <p style="margin-bottom: 5px;">🧪 <b>Tratamiento:</b> {treat['chem']}</p>
+                            <p style="margin-bottom: 0;">🛡️ <b>Prevención:</b> {treat['prev']}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                    if 'gradcams' in st.session_state and model_name in st.session_state['gradcams'] and st.session_state['gradcams'][model_name]:
+                        st.markdown("#### 🔍 Análisis de Calor (Grad-CAM)")
+                        st.markdown("<p style='font-size: 0.9rem; color: #aaa;'>Mueve el deslizador para ver exactamente qué partes de la hoja utilizó la IA para tomar su decisión.</p>", unsafe_allow_html=True)
+                        cam_img = st.session_state['gradcams'][model_name]
+                        orig_resized = image.resize(cam_img.size)
+                        image_comparison(
+                            img1=orig_resized,
+                            img2=cam_img,
+                            label1="Original",
+                            label2="Atención IA",
+                            width=500
+                        )
                     
                     # Mostrar todas las probabilidades si está activado
                     if show_probs:
