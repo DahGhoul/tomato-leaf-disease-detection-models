@@ -126,6 +126,60 @@ DISEASE_INFO = {
     'healthy': {'es': 'Saludable', 'severity': 'Ninguna', 'color': '#4CAF50'}
 }
 
+# Tratamientos recomendados
+TREATMENT_INFO = {
+    'Bacterial_spot': {
+        'water': 'Evitar riego por aspersión. Regar al nivel del suelo.',
+        'chem': 'Aplicar bactericidas a base de cobre.',
+        'prev': 'Usar semillas certificadas y rotación de cultivos.'
+    },
+    'Early_blight': {
+        'water': 'Mantener las hojas secas. Riego por goteo temprano.',
+        'chem': 'Fungicidas con clorotalonil o mancozeb.',
+        'prev': 'Eliminar hojas bajas infectadas, mejorar ventilación.'
+    },
+    'Late_blight': {
+        'water': 'Reducir la humedad ambiental. Riego por goteo.',
+        'chem': 'Fungicidas sistémicos específicos (ej. metalaxil).',
+        'prev': 'Eliminar y destruir plantas infectadas inmediatamente.'
+    },
+    'Leaf_Mold': {
+        'water': 'Reducir humedad en invernaderos. Riego por goteo.',
+        'chem': 'Fungicidas protectores como clorotalonil.',
+        'prev': 'Mejorar ventilación y circulación de aire.'
+    },
+    'Septoria_leaf_spot': {
+        'water': 'Evitar mojar el follaje.',
+        'chem': 'Fungicidas a base de cobre o clorotalonil.',
+        'prev': 'Rotación de cultivos por 1-2 años. Eliminar restos.'
+    },
+    'Spider_mites': {
+        'water': 'Aumentar humedad (a los ácaros les gusta lo seco).',
+        'chem': 'Acaricidas específicos o jabón potásico.',
+        'prev': 'Controlar malas hierbas. Monitoreo constante.'
+    },
+    'Target_Spot': {
+        'water': 'Mantener follaje seco. Buen drenaje.',
+        'chem': 'Fungicidas (ej. azoxistrobina o clorotalonil).',
+        'prev': 'Buena ventilación y espaciado adecuado.'
+    },
+    'Tomato_Yellow_Leaf_Curl_Virus': {
+        'water': 'Riego regular para reducir estrés.',
+        'chem': 'Insecticidas para controlar mosca blanca (vector).',
+        'prev': 'Usar variedades resistentes. Mallas anti-insectos.'
+    },
+    'Tomato_mosaic_virus': {
+        'water': 'Riego normal.',
+        'chem': 'No hay cura química. Desinfectar herramientas.',
+        'prev': 'Eliminar plantas infectadas. Lavarse manos y herramientas.'
+    },
+    'healthy': {
+        'water': 'Mantener el régimen actual.',
+        'chem': 'Ninguno necesario.',
+        'prev': 'Continuar con las buenas prácticas agrícolas.'
+    }
+}
+
 @st.cache_resource
 def load_models():
     """Carga los tres modelos entrenados"""
