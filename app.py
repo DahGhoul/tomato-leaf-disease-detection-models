@@ -1,11 +1,10 @@
 import streamlit as st
-import torch
-import torch.nn as nn
-from torchvision import transforms, models
 import numpy as np
 from PIL import Image
-import joblib
 import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+import requests
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime
@@ -181,131 +180,35 @@ TREATMENT_INFO = {
 }
 
 @st.cache_resource
-def load_models():
-    """Carga los tres modelos entrenados"""
-    models_dict = {}
-    
-    # 1. MobileNetV3
+def call_predict_api(image):
+    buffered = io.BytesIO()
+    image.save(buffered, format="JPEG")
+    files = {"file": ("image.jpg", buffered.getvalue(), "image/jpeg")}
     try:
-        mobilenet = models.mobilenet_v3_large()
-        mobilenet.classifier[3] = nn.Linear(mobilenet.classifier[3].in_features, len(DISEASE_CLASSES))
-        
-        # Cargar pesos - manejo de DataParallel
-        state_dict = torch.load('models/best_model.pth', map_location='cpu')
-        # Remover el prefijo 'module.' si existe
-        new_state_dict = {}
-        for k, v in state_dict.items():
-            if k.startswith('module.'):
-                new_state_dict[k[7:]] = v
-            else:
-                new_state_dict[k] = v
-        
-        mobilenet.load_state_dict(new_state_dict)
-        mobilenet.eval()
-        models_dict['MobileNetV3'] = mobilenet
+        response = requests.post("http://api:8000/predict", files=files)
+        if response.status_code == 200:
+            # Añadir entropía simulada para compatibilidad con OOD logic original
+            preds = response.json().get("predictions", {})
+            for m in preds:
+                preds[m]["entropy"] = stats.entropy(preds[m]["probabilities"])
+            return preds
     except Exception as e:
-        st.error(f"Error cargando MobileNetV3: {str(e)}")
-    
-    # 2. EfficientNetB7
+        st.error(f"Error conectando a la API: {e}")
+    return {}
+
+def call_gradcam_api(image, model_name):
+    buffered = io.BytesIO()
+    image.save(buffered, format="JPEG")
+    files = {"file": ("image.jpg", buffered.getvalue(), "image/jpeg")}
     try:
-        efficientnet = models.efficientnet_b7()
-        efficientnet.classifier = nn.Linear(2560, len(DISEASE_CLASSES))
-        efficientnet.load_state_dict(torch.load('models/plant_disease_model.pth', map_location='cpu'))
-        efficientnet.eval()
-        models_dict['EfficientNetB7'] = efficientnet
+        response = requests.post(f"http://api:8000/gradcam?model_name={model_name}", files=files)
+        if response.status_code == 200:
+            b64_str = response.json().get("gradcam_base64")
+            if b64_str:
+                return Image.open(io.BytesIO(base64.b64decode(b64_str)))
     except Exception as e:
-        st.error(f"Error cargando EfficientNetB7: {str(e)}")
-    
-    # 3. SVM con ResNet50
-    try:
-        svm_data = joblib.load('models/svm_tomato.pkl')
-        # Cargar ResNet50 para extracción de características
-        resnet = models.resnet50(weights='IMAGENET1K_V2')
-        resnet.fc = nn.Identity()
-        resnet.eval()
-        models_dict['SVM'] = {'svm': svm_data['svm'], 'feature_extractor': resnet}
-    except Exception as e:
-        st.error(f"Error cargando SVM: {str(e)}")
-    
-    return models_dict
-
-def preprocess_image(image, model_name):
-    """Preprocesa la imagen según el modelo"""
-    if model_name == 'MobileNetV3':
-        transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ])
-    elif model_name == 'EfficientNetB7':
-        transform = transforms.Compose([
-            transforms.Resize((128, 128)),
-            transforms.ToTensor(),
-            transforms.Lambda(lambda x: x / 255.0)
-        ])
-    else:  # SVM
-        transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ])
-    
-    return transform(image).unsqueeze(0)
-
-
-def generate_gradcam(image_tensor, original_image, model, model_name):
-    try:
-        if model_name == 'MobileNetV3':
-            target_layers = [model.features[-1]]
-        elif model_name == 'EfficientNetB7':
-            target_layers = [model.features[-1]]
-        else:
-            return None
-        
-        cam = GradCAM(model=model, target_layers=target_layers)
-        targets = [ClassifierOutputTarget(torch.argmax(model(image_tensor)).item())]
-        grayscale_cam = cam(input_tensor=image_tensor, targets=targets)[0, :]
-        
-        # Resize original image to match tensor size
-        size = (224, 224) if model_name != 'EfficientNetB7' else (128, 128)
-        orig_img_resized = original_image.resize(size)
-        rgb_img = np.float32(orig_img_resized) / 255
-        
-        cam_image = show_cam_on_image(rgb_img, grayscale_cam, use_rgb=True)
-        return Image.fromarray(cam_image)
-    except Exception as e:
-        return None
-
-def predict_with_model(image, model, model_name):
-    """Realiza predicción con un modelo específico"""
-    start_time = time.time()
-    
-    with torch.no_grad():
-        if model_name == 'SVM':
-            # Extraer características con ResNet50
-            img_tensor = preprocess_image(image, 'SVM')
-            features = model['feature_extractor'](img_tensor).numpy()
-            # Predicción con SVM
-            prediction = model['svm'].predict(features)[0]
-            probabilities = model['svm'].predict_proba(features)[0]
-        else:
-            # Predicción con redes neuronales
-            img_tensor = preprocess_image(image, model_name)
-            outputs = model(img_tensor)
-            probabilities = torch.nn.functional.softmax(outputs, dim=1)
-            prediction = torch.argmax(probabilities, dim=1).item()
-            probabilities = probabilities.numpy()[0]
-    
-    inference_time = time.time() - start_time
-    
-    entropy = stats.entropy(probabilities)
-    return {
-        'prediction': DISEASE_CLASSES[prediction],
-        'probabilities': probabilities,
-        'confidence': float(probabilities[prediction]),
-        'inference_time': inference_time,
-        'entropy': entropy
-    }
+        pass
+    return None
 
 def perform_statistical_tests(predictions):
     """Realiza pruebas estadísticas para comparar modelos"""
@@ -986,13 +889,6 @@ def main():
         show_comparison = st.checkbox("Mostrar gráfico comparativo", value=True)
         confidence_threshold = st.slider("Umbral de confianza", 0.0, 1.0, 0.7)
     
-    # Cargar modelos
-    models = load_models()
-    
-    if not models:
-        st.error("❌ No se pudieron cargar los modelos. Verifica que los archivos estén disponibles.")
-        return
-    
     # Tabs principales
     tab1, tab2, tab3, tab4 = st.tabs(["🔍 Análisis Individual", "📊 Comparación de Modelos", "📈 Métricas y Estadísticas", "🧪 Pruebas Estadísticas"])
     
@@ -1013,22 +909,25 @@ def main():
                 
                 # Botón de análisis
                 if st.button("🔬 Analizar Imagen y Generar Grad-CAM", type="primary"):
-                    with st.spinner("Ejecutando Inteligencia Artificial (Analizando patrones)..."):
-                        # OOD Detection
-                        dummy_res = predict_with_model(image, models['MobileNetV3'], 'MobileNetV3')
-                        if dummy_res['entropy'] > 1.8:
-                            st.error("🚨 ¡Alerta Anti-Engaños! La red neuronal tiene demasiada incertidumbre (Entropía alta). Por favor, asegúrate de subir una imagen clara de una hoja de tomate y no de otro objeto.")
+                    with st.spinner("Conectando con el Backend FastAPI..."):
+                        preds = call_predict_api(image)
+                        
+                        if not preds:
+                            st.error("Error al obtener predicciones de la API.")
                         else:
-                            st.session_state['predictions'] = {}
-                            st.session_state['gradcams'] = {}
-                            for model_name, model in models.items():
-                                result = predict_with_model(image, model, model_name)
-                                st.session_state['predictions'][model_name] = result
+                            # OOD Detection basica simulada con MobileNetV3 (si está en preds)
+                            dummy_res = preds.get('MobileNetV3', {})
+                            if dummy_res.get('entropy', 0) > 1.8:
+                                st.error("🚨 ¡Alerta Anti-Engaños! La red neuronal tiene demasiada incertidumbre (Entropía alta). Por favor, asegúrate de subir una imagen clara de una hoja de tomate y no de otro objeto.")
+                            else:
+                                st.session_state['predictions'] = preds
+                                st.session_state['gradcams'] = {}
                                 
-                                if model_name in ['MobileNetV3', 'EfficientNetB7']:
-                                    tensor_img = preprocess_image(image, model_name)
-                                    cam = generate_gradcam(tensor_img, image, model, model_name)
-                                    st.session_state['gradcams'][model_name] = cam
+                                for model_name in preds.keys():
+                                    if "ResNet" not in model_name and "RF" not in model_name: # Solo clásicos para GradCAM en este demo
+                                        cam = call_gradcam_api(image, model_name)
+                                        if cam:
+                                            st.session_state['gradcams'][model_name] = cam
         
         with col2:
             if 'predictions' in st.session_state and st.session_state['predictions']:
