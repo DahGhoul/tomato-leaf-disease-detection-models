@@ -30,6 +30,7 @@ from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from streamlit_image_comparison import image_comparison
+from docx import Document
 
 # Ignorar warnings de versiones de scikit-learn
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
@@ -853,6 +854,76 @@ def generate_pdf_report(predictions, image_buffer, statistical_results, traditio
     buffer.seek(0)
     return buffer
 
+def generate_word_report(predictions, statistical_results, traditional_tests):
+    doc = Document()
+    doc.add_heading('Reporte de Análisis de Enfermedades - Tomatismo', 0)
+    
+    doc.add_heading('Resumen Ejecutivo', level=1)
+    doc.add_paragraph(f"Diagnóstico por Consenso: {DISEASE_INFO[statistical_results['consensus']]['es']}")
+    doc.add_paragraph(f"Severidad: {DISEASE_INFO[statistical_results['consensus']]['severity']}")
+    
+    doc.add_heading('Predicciones por Modelo', level=1)
+    for model_name, result in predictions.items():
+        p = doc.add_paragraph()
+        p.add_run(f"{model_name}: ").bold = True
+        p.add_run(f"{DISEASE_INFO[result['prediction']]['es']} ({result['confidence']*100:.2f}%)")
+        
+    doc.add_heading('Resultados Estadísticos', level=1)
+    p2 = doc.add_paragraph()
+    p2.add_run("Test de Friedman (Tiempos): ").bold = True
+    p2.add_run(f"p-value = {statistical_results['friedman_p_value']:.4f}")
+    
+    if traditional_tests:
+        doc.add_heading('Pruebas Robustas (McNemar / T-Test / Z-Test)', level=1)
+        for category, tests in traditional_tests.items():
+            for t_name, t_data in tests.items():
+                p3 = doc.add_paragraph()
+                p3.add_run(f"[{category}] {t_name}: ").bold = True
+                p3.add_run(f"p-value = {t_data.get('p_value', 0):.4f} (Significativo: {t_data.get('significant', False)})")
+        
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+def generate_excel_report(predictions, statistical_results, traditional_tests):
+    df_preds = []
+    for m, res in predictions.items():
+        df_preds.append({
+            "Modelo": m,
+            "Prediccion": DISEASE_INFO[res['prediction']]['es'],
+            "Confianza (%)": res['confidence'] * 100,
+            "Tiempo Inferencia (s)": res['inference_time'],
+            "Entropia": res.get('entropy', 0)
+        })
+    df1 = pd.DataFrame(df_preds)
+    
+    df_stats = pd.DataFrame([{
+        "Consenso": DISEASE_INFO[statistical_results['consensus']]['es'],
+        "Test Friedman (p-value)": statistical_results['friedman_p_value']
+    }])
+    
+    trad_list = []
+    if traditional_tests:
+        for category, tests in traditional_tests.items():
+            for t_name, t_data in tests.items():
+                trad_list.append({
+                    "Categoria": category,
+                    "Comparacion": t_name,
+                    "p-value": t_data.get("p_value", 0),
+                    "Significativo": t_data.get("significant", False)
+                })
+    df_trad = pd.DataFrame(trad_list)
+    
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        df1.to_excel(writer, sheet_name='Predicciones', index=False)
+        df_stats.to_excel(writer, sheet_name='Estadisticas', index=False)
+        if not df_trad.empty:
+            df_trad.to_excel(writer, sheet_name='Pruebas Robustas', index=False)
+    buffer.seek(0)
+    return buffer.getvalue()
+
 def main():
     # Header principal
     st.markdown("""
@@ -890,8 +961,31 @@ def main():
         confidence_threshold = st.slider("Umbral de confianza", 0.0, 1.0, 0.7)
     
     # Tabs principales
-    tab1, tab2, tab3, tab4 = st.tabs(["🔍 Análisis Individual", "📊 Comparación de Modelos", "📈 Métricas y Estadísticas", "🧪 Pruebas Estadísticas"])
+    tab0, tab1, tab2, tab3, tab4 = st.tabs(["📊 Análisis Exploratorio (EDA)", "🔍 Análisis Individual", "📊 Comparación de Modelos", "📈 Métricas y Estadísticas", "🧪 Pruebas Estadísticas"])
     
+    with tab0:
+        st.markdown("## 📊 Análisis Exploratorio de Datos (EDA)")
+        st.markdown("Resumen de las características del conjunto de datos original utilizado para el entrenamiento.")
+        
+        try:
+            import json
+            import os
+            
+            # Cargar estadísticas
+            with open("temp/eda/eda_stats.json", "r") as f:
+                eda_stats = json.load(f)
+                
+            col_eda1, col_eda2, col_eda3 = st.columns(3)
+            col_eda1.metric("Total de Imágenes", eda_stats["total_images"])
+            col_eda2.metric("Dimensión Promedio", f"{int(eda_stats['mean_width'])}x{int(eda_stats['mean_height'])} px")
+            col_eda3.metric("Total de Clases", "10")
+            
+            st.markdown("### 📈 Distribución de Clases")
+            st.image("temp/eda/class_distribution.png", use_column_width=True)
+            
+        except Exception as e:
+            st.warning("No se encontraron los resultados del EDA. Por favor, ejecuta `python eda.py` primero.")
+            
     with tab1:
         col1, col2 = st.columns([1, 2])
         
@@ -1337,33 +1431,57 @@ def main():
             st.markdown("---")
             st.markdown("### 📄 Generar Reporte")
             
-            col_pdf1, col_pdf2, col_pdf3 = st.columns([1, 2, 1])
+            col_pdf1, col_pdf2, col_pdf3 = st.columns(3)
             
+            with col_pdf1:
+                # Obtener la imagen si existe
+                img_bytes = st.session_state.get('uploaded_image', None)
+                img_buffer = BytesIO(img_bytes) if img_bytes else None
+                
+                # Generar PDF con pruebas tradicionales incluidas
+                pdf_buffer = generate_pdf_report(
+                    st.session_state['predictions'],
+                    img_buffer,
+                    statistical_results,
+                    traditional_results
+                )
+                st.download_button(
+                    label="📥 PDF",
+                    data=pdf_buffer,
+                    file_name=f"reporte_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+                
             with col_pdf2:
-                if st.button("🎯 Generar Reporte PDF", type="primary", use_container_width=True):
-                    with st.spinner("Generando reporte PDF..."):
-                        # Obtener la imagen si existe - CORREGIDO
-                        img_bytes = st.session_state.get('uploaded_image', None)
-                        img_buffer = BytesIO(img_bytes) if img_bytes else None
-                        
-                        # Generar PDF con pruebas tradicionales incluidas
-                        pdf_buffer = generate_pdf_report(
-                            st.session_state['predictions'],
-                            img_buffer,
-                            statistical_results,
-                            traditional_results  # Agregamos las pruebas tradicionales
-                        )
-                        
-                        # Descargar PDF
-                        st.download_button(
-                            label="📥 Descargar Reporte PDF",
-                            data=pdf_buffer,
-                            file_name=f"reporte_completo_tomate_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                            mime="application/pdf",
-                            use_container_width=True
-                        )
-                        
-                        st.success("✅ Reporte generado exitosamente con todas las pruebas estadísticas y gráficos!")
+                word_buffer = generate_word_report(
+                    st.session_state['predictions'],
+                    statistical_results,
+                    traditional_results
+                )
+                st.download_button(
+                    label="📥 Word",
+                    data=word_buffer,
+                    file_name=f"reporte_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True
+                )
+                
+            with col_pdf3:
+                excel_buffer = generate_excel_report(
+                    st.session_state['predictions'],
+                    statistical_results,
+                    traditional_results
+                )
+                st.download_button(
+                    label="📥 Excel",
+                    data=excel_buffer,
+                    file_name=f"reporte_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+            
+            st.success("✅ ¡Reportes generados exitosamente!")
             
             # Interpretación de resultados
             st.markdown("---")
