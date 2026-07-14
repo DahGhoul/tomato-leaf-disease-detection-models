@@ -1145,15 +1145,15 @@ def main():
         t['tab_chat']
     ])
     with tab0:
-        st.markdown("## 🔬 Análisis Inteligente")
-        st.write("Sube la imagen de una hoja de tomate para obtener un diagnóstico basado en el consenso de todos nuestros modelos.")
+        st.markdown(f"## {t['tab_inference']}")
+        st.write(t['inference_desc'])
         
         col1, col2 = st.columns([1, 2])
         
         with col1:
-            st.markdown("### 📸 Cargar Imagen")
+            st.markdown(f"### {t['upload_img']}")
             uploaded_file = st.file_uploader(
-                "Selecciona una imagen de hoja de tomate", 
+                t['upload_label'], 
                 type=["jpg", "jpeg", "png"],
                 help="Soporta imágenes de alta resolución"
             )
@@ -1162,10 +1162,10 @@ def main():
                 image = Image.open(uploaded_file)
                 if image.mode in ('RGBA', 'P'):
                     image = image.convert('RGB')
-                st.image(image, caption="Imagen cargada", use_column_width=True)
+                st.image(image, caption="Image uploaded" if st.session_state['lang']=='en' else "Imagen cargada", use_column_width=True)
                 
-                if st.button("🚀 Iniciar Análisis Completo", use_container_width=True):
-                    with st.spinner("Procesando imagen con 4 modelos en paralelo..."):
+                if st.button(f"🚀 {t['btn_analyze']}", use_container_width=True):
+                    with st.spinner(f"{t['loading']}..."):
                         preds = call_predict_api(image, fast_mode)
                         
                         if not preds:
@@ -1192,30 +1192,30 @@ def main():
                 info = DISEASE_INFO[consensus_disease]
                 
                 # MOSTRAR CONSENSO OBVIO
-                st.markdown("### 👑 Predicción Final (Consenso por Confianza)")
+                st.markdown(f"### {t['consensus_title']}")
                 st.markdown(f'''
                 <div style="background-color: {info['color']}20; border-left: 5px solid {info['color']}; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                    <h2 style="margin:0; color: {info['color']};">🍅 {info['es']}</h2>
-                    <p style="margin:5px 0 0 0; font-size: 1.1em;">Severidad: <strong>{info['severity']}</strong> | Acumulado de Confianza: {confidence_sums[consensus_disease]*100:.1f}%</p>
+                    <h2 style="margin:0; color: {info['color']};">🍅 {info[st.session_state['lang']]}</h2>
+                    <p style="margin:5px 0 0 0; font-size: 1.1em;">{t['severity']}: <strong>{info['severity']}</strong> | {t['confidence_acc']}: {confidence_sums[consensus_disease]*100:.1f}%</p>
                 </div>
                 ''', unsafe_allow_html=True)
                 
                 # Acordeón de Tratamiento
-                with st.expander("🛡️ Ver Tratamiento Recomendado", expanded=True):
+                with st.expander(t['treatment_btn'], expanded=True):
                     treat = TREATMENT_INFO.get(consensus_disease, TREATMENT_INFO['healthy'])
-                    st.write(f"💧 **Riego:** {treat['water']}")
-                    st.write(f"🧪 **Químico:** {treat['chem']}")
-                    st.write(f"🛑 **Prevención:** {treat['prev']}")
+                    st.write(f"💧 **{t['water']}:** {treat['water']}")
+                    st.write(f"🧪 **{t['chem']}:** {treat['chem']}")
+                    st.write(f"🛑 **{t['prev']}:** {treat['prev']}")
                 
                 # Acordeón de Detalles por Modelo y GradCAM On-Demand
-                with st.expander("🤖 Detalles por Modelo y Mapas de Calor"):
+                with st.expander(t['model_details']):
                     for model_name, result in preds.items():
                         st.markdown(f"#### {model_name}")
-                        st.write(f"Predicción: **{DISEASE_INFO[result['prediction']]['es']}** ({result['confidence']*100:.1f}%)")
+                        st.write(f"Predicción: **{DISEASE_INFO[result['prediction']][st.session_state['lang']]}** ({result['confidence']*100:.1f}%)")
                         
                         # Botón para pedir el mapa de calor
                         if "Extractor" not in model_name and "SVM" not in model_name and "RF" not in model_name:
-                            if st.button(f"Generar Mapa de Calor para {model_name}", key=f"btn_{model_name}"):
+                            if st.button(f"{t['heat_btn']} {model_name}", key=f"btn_{model_name}"):
                                 with st.spinner(f"Generando Grad-CAM para {model_name}..."):
                                     cam_img = call_gradcam_api(image, model_name)
                                     if cam_img:
@@ -1240,7 +1240,7 @@ def main():
                         st.markdown("---")
                         
                 # Botones de exportación
-                st.markdown("### 📄 Exportar Reportes")
+                st.markdown(f"### {t['export_title']}")
                 stat_res = perform_statistical_tests(preds)
                 trad_res = perform_traditional_statistical_tests()
                 
@@ -1250,13 +1250,13 @@ def main():
                     if image:
                         image.save(image_buffer, format="JPEG")
                     pdf_buffer = generate_pdf_report(preds, image_buffer, stat_res, trad_res)
-                    st.download_button("Descargar PDF", pdf_buffer, "reporte.pdf", "application/pdf", use_container_width=True)
+                    st.download_button(t['btn_pdf'], pdf_buffer, "reporte.pdf", "application/pdf", use_container_width=True)
                 with c2:
                     word_buffer = generate_word_report(preds, stat_res, trad_res)
-                    st.download_button("Descargar Word", word_buffer, "reporte.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+                    st.download_button(t['btn_word'], word_buffer, "reporte.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
                 with c3:
                     excel_buffer = generate_excel_report(preds, stat_res, trad_res)
-                    st.download_button("Descargar Excel", excel_buffer, "reporte.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+                    st.download_button(t['btn_excel'], excel_buffer, "reporte.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
                     
 
 
