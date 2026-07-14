@@ -1498,23 +1498,27 @@ def main():
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
                 
-        if prompt := st.chat_input(t['chat_input']):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
+        with st.form("chat_form", clear_on_submit=True):
+            col_in1, col_in2 = st.columns([5, 1])
+            with col_in1:
+                prompt = st.text_input("Mensaje", placeholder=t['chat_input'], label_visibility="collapsed")
+            with col_in2:
+                submitted = st.form_submit_button("Enviar 📩")
                 
+        if submitted and prompt:
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            
             # Rule-based simple responses since we don't have OpenAI API keys installed
             response = "Actualmente estoy procesando información técnica sobre las redes neuronales empleadas. Como asistente agrónomo, te sugiero aislar las plantas que presenten síntomas de tizón y asegurar que los modelos MobileNet o EfficientNet las analicen."
             if "hola" in prompt.lower() or "hello" in prompt.lower():
                 response = t['chat_welcome']
-            elif "tizón" in prompt.lower() or "blight" in prompt.lower():
+            elif "tizón" in prompt.lower() or "blight" in prompt.lower() or "tizon" in prompt.lower():
                 response = "El tizón es causado por hongos. Te recomiendo revisar la humedad de tus cultivos y usar fungicidas preventivos."
             elif "modelo" in prompt.lower() or "model" in prompt.lower():
                 response = "Utilizamos un ensamble de 5 modelos: MobileNetV3, EfficientNetB7, ResNet50 y dos modelos híbridos que combinan CNNs con SVM y Random Forest para máxima precisión."
                 
-            with st.chat_message("assistant"):
-                st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
+            st.rerun()
 
 
 if __name__ == '__main__':
