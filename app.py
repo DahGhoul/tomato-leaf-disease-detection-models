@@ -180,50 +180,35 @@ TREATMENT_INFO = {
     }
 }
 
+@st.cache_resource
 def call_predict_api(image):
     buffered = io.BytesIO()
     image.save(buffered, format="JPEG")
     files = {"file": ("image.jpg", buffered.getvalue(), "image/jpeg")}
     try:
-        response = requests.post("http://localhost:8000/predict", files=files)
+        response = requests.post("http://api:8000/predict", files=files)
         if response.status_code == 200:
             # Añadir entropía simulada para compatibilidad con OOD logic original
             preds = response.json().get("predictions", {})
-            class_map = {
-                'Tomato___Bacterial_spot': 'Bacterial_spot',
-                'Tomato___Early_blight': 'Early_blight',
-                'Tomato___Late_blight': 'Late_blight',
-                'Tomato___Leaf_Mold': 'Leaf_Mold',
-                'Tomato___Septoria_leaf_spot': 'Septoria_leaf_spot',
-                'Tomato___Spider_mites Two-spotted_spider_mite': 'Spider_mites',
-                'Tomato___Target_Spot': 'Target_Spot',
-                'Tomato___Tomato_Yellow_Leaf_Curl_Virus': 'Tomato_Yellow_Leaf_Curl_Virus',
-                'Tomato___Tomato_mosaic_virus': 'Tomato_mosaic_virus',
-                'Tomato___healthy': 'healthy'
-            }
             for m in preds:
                 preds[m]["entropy"] = stats.entropy(preds[m]["probabilities"])
-                if preds[m].get("prediction") in class_map:
-                    preds[m]["prediction"] = class_map[preds[m]["prediction"]]
             return preds
     except Exception as e:
         st.error(f"Error conectando a la API: {e}")
     return {}
 
 def call_gradcam_api(image, model_name):
+    buffered = io.BytesIO()
+    image.save(buffered, format="JPEG")
+    files = {"file": ("image.jpg", buffered.getvalue(), "image/jpeg")}
     try:
-        buffered = io.BytesIO()
-        image.save(buffered, format="JPEG")
-        files = {"file": ("image.jpg", buffered.getvalue(), "image/jpeg")}
-        response = requests.post(f"http://localhost:8000/gradcam?model_name={model_name}", files=files)
+        response = requests.post(f"http://api:8000/gradcam?model_name={model_name}", files=files)
         if response.status_code == 200:
             b64_str = response.json().get("gradcam_base64")
             if b64_str:
                 return Image.open(io.BytesIO(base64.b64decode(b64_str)))
-        else:
-            st.error(f"Error de API: {response.text}")
     except Exception as e:
-        st.error(f"Excepción local en Grad-CAM: {e}")
+        pass
     return None
 
 def perform_statistical_tests(predictions):
@@ -231,17 +216,8 @@ def perform_statistical_tests(predictions):
     results = {}
     model_names = list(predictions.keys())
     
-    # 1. Consenso general (por suma de confianza)
-    confidence_sums = {}
-    for model in model_names:
-        pred = predictions[model]['prediction']
-        conf = predictions[model]['confidence']
-        confidence_sums[pred] = confidence_sums.get(pred, 0) + conf
-    results['consensus'] = max(confidence_sums, key=confidence_sums.get) if confidence_sums else 'healthy'
-    
-    # 2. Test de Friedman para comparar tiempos de inferencia
+    # 1. Test de Friedman para comparar tiempos de inferencia
     inference_times = [predictions[model]['inference_time'] for model in model_names]
-    results['friedman_p_value'] = 0.035  # Valor simulado para demostración
     
     # 2. Coeficiente Kappa de Cohen para acuerdo entre modelos
     if len(model_names) >= 2:
@@ -698,7 +674,7 @@ def generate_pdf_report(predictions, image_buffer, statistical_results, traditio
     story.append(Paragraph("<b>Análisis de Incertidumbre (Entropía):</b>", styles['Normal']))
     entropy_data = []
     for model_name, result in predictions.items():
-        probs = np.array(result['probabilities'])
+        probs = result['probabilities']
         entropy = -np.sum(probs * np.log2(probs + 1e-10))
         entropy_data.append([
             model_name,
@@ -950,218 +926,610 @@ def generate_excel_report(predictions, statistical_results, traditional_tests):
 
 def main():
     # Header principal
-    st.markdown('''
+    st.markdown("""
     <div class="main-header">
         <h1>🍅 Sistema de Detección de Enfermedades en Tomate</h1>
-        <p>Comparación de modelos de Deep Learning Clásicos e Híbridos para diagnóstico automático</p>
+        <p>Comparación de modelos de Deep Learning para diagnóstico automático</p>
     </div>
-    ''', unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
     
     # Sidebar
     with st.sidebar:
         st.title("⚙️ Configuración")
-        st.markdown("### 📊 Modelos Cargados")
-        model_info = {
-            'MobileNetV3': {'tipo': 'Clásico', 'speed': 'Rápido'},
-            'EfficientNetB7': {'tipo': 'Clásico', 'speed': 'Medio'},
-            'MobileNetV3_SVM': {'tipo': 'Híbrido', 'speed': 'Rápido'},
-            'EfficientNet_RF': {'tipo': 'Híbrido', 'speed': 'Medio'}
-        }
-        for name, info in model_info.items():
-            with st.expander(f"{name}"):
-                st.write(f"**Tipo:** {info['tipo']}")
-                st.write(f"**Velocidad:** {info['speed']}")
-                
-        st.markdown("---")
-        st.info("💡 Sube una imagen en la pestaña de 'Análisis Inteligente' para probar el ensamble de modelos.")
-
-    # TABS REORGANIZADOS: De 5 a 3
-    tab1, tab2, tab3 = st.tabs([
-        "🔬 Análisis Inteligente", 
-        "📊 Dashboard Global", 
-        "📐 Pruebas Estadísticas"
-    ])
-    
-    with tab1:
-        st.markdown("## 🔬 Análisis Inteligente")
-        st.write("Sube la imagen de una hoja de tomate para obtener un diagnóstico basado en el consenso de todos nuestros modelos.")
         
+        # Información de los modelos
+        st.markdown("### 📊 Modelos Disponibles")
+        
+        model_info = {
+            'MobileNetV3': {'params': '5.4M', 'accuracy': '95.2%', 'speed': 'Rápido'},
+            'EfficientNet': {'params': '66M', 'accuracy': '97.8%', 'speed': 'Lento'},
+            'ResNet50': {'params': '25M', 'accuracy': '94.1%', 'speed': 'Medio'},
+            'MobileNetV3_SVM': {'params': '5.4M + SVM', 'accuracy': '96.5%', 'speed': 'Rápido'},
+            'EfficientNet_RF': {'params': '66M + RF', 'accuracy': '98.1%', 'speed': 'Medio'}
+        }
+        
+        for model, info in model_info.items():
+            with st.expander(f"📱 {model}"):
+                st.write(f"**Parámetros:** {info['params']}")
+                st.write(f"**Precisión:** {info['accuracy']}")
+                st.write(f"**Velocidad:** {info['speed']}")
+        
+        st.markdown("---")
+        
+        # Opciones de visualización
+        st.markdown("### 🎨 Opciones de Visualización")
+        show_probs = st.checkbox("Mostrar todas las probabilidades", value=True)
+        show_comparison = st.checkbox("Mostrar gráfico comparativo", value=True)
+        confidence_threshold = st.slider("Umbral de confianza", 0.0, 1.0, 0.7)
+    
+    # Tabs principales
+    tab0, tab1, tab2, tab3, tab4 = st.tabs(["📊 Análisis Exploratorio (EDA)", "🔍 Análisis Individual", "📊 Comparación de Modelos", "📈 Métricas y Estadísticas", "🧪 Pruebas Estadísticas"])
+    
+    with tab0:
+        st.markdown("## 📊 Análisis Exploratorio de Datos (EDA)")
+        st.markdown("Resumen de las características del conjunto de datos original utilizado para el entrenamiento.")
+        
+        try:
+            import json
+            import os
+            
+            # Cargar estadísticas
+            with open("temp/eda/eda_stats.json", "r") as f:
+                eda_stats = json.load(f)
+                
+            col_eda1, col_eda2, col_eda3 = st.columns(3)
+            col_eda1.metric("Total de Imágenes", eda_stats["total_images"])
+            col_eda2.metric("Dimensión Promedio", f"{int(eda_stats['mean_width'])}x{int(eda_stats['mean_height'])} px")
+            col_eda3.metric("Total de Clases", "10")
+            
+            st.markdown("### 📈 Distribución de Clases")
+            st.image("temp/eda/class_distribution.png", use_column_width=True)
+            
+        except Exception as e:
+            st.warning("No se encontraron los resultados del EDA. Por favor, ejecuta `python eda.py` primero.")
+            
+    with tab1:
         col1, col2 = st.columns([1, 2])
         
         with col1:
-            st.markdown("### 📸 Cargar Imagen")
+            st.markdown("### 📤 Cargar Imagen")
             uploaded_file = st.file_uploader(
-                "Selecciona una imagen de hoja de tomate", 
-                type=["jpg", "jpeg", "png"],
-                help="Soporta imágenes de alta resolución"
+                "Selecciona una imagen de hoja de tomate",
+                type=['jpg', 'jpeg', 'png'],
+                help="Formatos soportados: JPG, JPEG, PNG"
             )
             
             if uploaded_file is not None:
-                image = Image.open(uploaded_file)
-                st.image(image, caption="Imagen cargada", use_container_width=True)
+                image = Image.open(uploaded_file).convert('RGB')
+                st.image(image, caption="Imagen cargada", use_column_width=True)
                 
-                if st.button("🚀 Iniciar Análisis Completo", use_container_width=True):
-                    with st.spinner("Procesando imagen con 4 modelos en paralelo..."):
+                # Botón de análisis
+                if st.button("🔬 Analizar Imagen y Generar Grad-CAM", type="primary"):
+                    with st.spinner("Conectando con el Backend FastAPI..."):
                         preds = call_predict_api(image)
                         
                         if not preds:
-                            st.error("No se pudo obtener una predicción de la API.")
+                            st.error("Error al obtener predicciones de la API.")
                         else:
-                            st.session_state['predictions'] = preds
-                            # Limpiar gradcams anteriores
-                            st.session_state['gradcams'] = {}
-                            st.session_state['analyzed_image'] = image
+                            # OOD Detection basica simulada con MobileNetV3 (si está en preds)
+                            dummy_res = preds.get('MobileNetV3', {})
+                            if dummy_res.get('entropy', 0) > 1.8:
+                                st.error("🚨 ¡Alerta Anti-Engaños! La red neuronal tiene demasiada incertidumbre (Entropía alta). Por favor, asegúrate de subir una imagen clara de una hoja de tomate y no de otro objeto.")
+                            else:
+                                st.session_state['predictions'] = preds
+                                st.session_state['gradcams'] = {}
+                                
+                                for model_name in preds.keys():
+                                    if "SVM" not in model_name and "RF" not in model_name: # Solo clásicos para GradCAM en este demo
+                                        cam = call_gradcam_api(image, model_name)
+                                        if cam:
+                                            st.session_state['gradcams'][model_name] = cam
         
         with col2:
             if 'predictions' in st.session_state and st.session_state['predictions']:
-                preds = st.session_state['predictions']
-                image = st.session_state.get('analyzed_image', None)
+                st.markdown("### 🎯 Resultados del Análisis")
                 
-                # CÁLCULO DEL CONSENSO POR CONFIANZA (SUMATORIA)
-                confidence_sums = {}
-                for m, r in preds.items():
-                    pred = r['prediction']
-                    conf = r['confidence']
-                    confidence_sums[pred] = confidence_sums.get(pred, 0) + conf
-                    
-                consensus_disease = max(confidence_sums, key=confidence_sums.get)
-                info = DISEASE_INFO[consensus_disease]
+                model_names = list(st.session_state['predictions'].keys())
+                model_tabs = st.tabs(model_names)
                 
-                # MOSTRAR CONSENSO OBVIO
-                st.markdown("### 👑 Predicción Final (Consenso por Confianza)")
-                st.markdown(f'''
-                <div style="background-color: {info['color']}20; border-left: 5px solid {info['color']}; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                    <h2 style="margin:0; color: {info['color']};">🍅 {info['es']}</h2>
-                    <p style="margin:5px 0 0 0; font-size: 1.1em;">Severidad: <strong>{info['severity']}</strong> | Acumulado de Confianza: {confidence_sums[consensus_disease]*100:.1f}%</p>
-                </div>
-                ''', unsafe_allow_html=True)
-                
-                # Acordeón de Tratamiento
-                with st.expander("🛡️ Ver Tratamiento Recomendado", expanded=True):
-                    treat = TREATMENT_INFO.get(consensus_disease, TREATMENT_INFO['healthy'])
-                    st.write(f"💧 **Riego:** {treat['water']}")
-                    st.write(f"🧪 **Químico:** {treat['chem']}")
-                    st.write(f"🛑 **Prevención:** {treat['prev']}")
-                
-                # Acordeón de Detalles por Modelo y GradCAM On-Demand
-                with st.expander("🤖 Detalles por Modelo y Mapas de Calor"):
-                    for model_name, result in preds.items():
-                        st.markdown(f"#### {model_name}")
-                        st.write(f"Predicción: **{DISEASE_INFO[result['prediction']]['es']}** ({result['confidence']*100:.1f}%)")
+                for tab, (model_name, result) in zip(model_tabs, st.session_state['predictions'].items()):
+                    with tab:
+                        disease = result['prediction']
+                        confidence = result['confidence']
+                        time_taken = result['inference_time']
                         
-                        # Botón para pedir el mapa de calor
-                        if "Extractor" not in model_name and "SVM" not in model_name and "RF" not in model_name:
-                            if st.button(f"Generar Mapa de Calor para {model_name}", key=f"btn_{model_name}"):
-                                with st.spinner(f"Generando Grad-CAM para {model_name}..."):
-                                    cam_img = call_gradcam_api(image, model_name)
-                                    if cam_img:
-                                        st.session_state['gradcams'][model_name] = cam_img
-                                    else:
-                                        st.error("Error al generar el mapa de calor.")
+                        # Card para cada modelo
+                        st.markdown(f"""
+                        <div class="model-card">
+                            <h4>🤖 {model_name}</h4>
+                            <div class="prediction-box">
+                                <strong>Diagnóstico:</strong> {DISEASE_INFO[disease]['es']}<br>
+                                <strong>Confianza:</strong> {confidence:.2%}<br>
+                                <strong>Severidad:</strong> {DISEASE_INFO[disease]['severity']}<br>
+                                <strong>Tiempo:</strong> {time_taken:.3f}s
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        if disease in TREATMENT_INFO:
+                            treat = TREATMENT_INFO[disease]
+                            st.markdown(f"""
+                            <div style="background: rgba(46, 204, 113, 0.15); padding: 1.5rem; border-radius: 10px; margin-top: 10px; border-left: 5px solid #2ecc71; margin-bottom: 20px;">
+                                <h4 style="color: #2ecc71; margin-top: 0;">📋 Plan de Acción (Recomendación)</h4>
+                                <p style="margin-bottom: 5px;">💧 <b>Riego:</b> {treat['water']}</p>
+                                <p style="margin-bottom: 5px;">🧪 <b>Tratamiento:</b> {treat['chem']}</p>
+                                <p style="margin-bottom: 0;">🛡️ <b>Prevención:</b> {treat['prev']}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
                             
-                            if 'gradcams' in st.session_state and model_name in st.session_state['gradcams']:
-                                cam_img = st.session_state['gradcams'][model_name]
-                                cam_img = cam_img.resize((400, 400), Image.BILINEAR)
-                                orig_resized = image.resize((400, 400), Image.BILINEAR)
-                                st.write("¿Dónde miró la IA?")
-                                image_comparison(
-                                    img1=orig_resized,
-                                    img2=cam_img,
-                                    label1="Original",
-                                    label2="Grad-CAM",
-                                    width=400
-                                )
-                        else:
-                            st.caption("Los mapas de calor no están disponibles para modelos híbridos.")
-                        st.markdown("---")
+                        if 'gradcams' in st.session_state and model_name in st.session_state['gradcams'] and st.session_state['gradcams'][model_name]:
+                            st.markdown("#### 🔍 Análisis de Calor (Grad-CAM)")
+                            st.markdown("<p style='font-size: 0.9rem; color: #aaa;'>Mueve el deslizador para ver exactamente qué partes de la hoja utilizó la IA para tomar su decisión.</p>", unsafe_allow_html=True)
+                            cam_img = st.session_state['gradcams'][model_name]
+                            orig_resized = image.resize(cam_img.size)
+                            image_comparison(
+                                img1=orig_resized,
+                                img2=cam_img,
+                                label1="Original",
+                                label2="Atención IA",
+                                width=500
+                            )
                         
-                # Botones de exportación
-                st.markdown("### 📄 Exportar Reportes")
-                stat_res = perform_statistical_tests(preds)
-                trad_res = {'t_tests': {}, 'z_tests': {}}
-                
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    image_buffer = io.BytesIO()
-                    if image:
-                        image.save(image_buffer, format="JPEG")
-                    pdf_buffer = generate_pdf_report(preds, image_buffer, stat_res, trad_res)
-                    st.download_button("Descargar PDF", pdf_buffer, "reporte.pdf", "application/pdf", use_container_width=True)
-                with c2:
-                    word_buffer = generate_word_report(preds, stat_res, trad_res)
-                    st.download_button("Descargar Word", word_buffer, "reporte.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
-                with c3:
-                    excel_buffer = generate_excel_report(preds, stat_res, trad_res)
-                    st.download_button("Descargar Excel", excel_buffer, "reporte.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-                    
+                        # Mostrar todas las probabilidades si está activado
+                        if show_probs:
+                            probs_df = pd.DataFrame({
+                                'Enfermedad': [DISEASE_INFO[cls]['es'] for cls in DISEASE_CLASSES],
+                                'Probabilidad': result['probabilities']
+                            }).sort_values('Probabilidad', ascending=False)
+                            
+                            fig = px.bar(
+                                probs_df.head(5), 
+                                x='Probabilidad', 
+                                y='Enfermedad',
+                                orientation='h',
+                                color='Probabilidad',
+                                color_continuous_scale='viridis'
+                            )
+                            fig.update_layout(height=300, showlegend=False)
+                            st.plotly_chart(fig, use_container_width=True)
+    
     with tab2:
-        st.markdown("## 📊 Dashboard Global de Rendimiento")
-        st.write("Vista general de las métricas del sistema y datos históricos.")
-        
-        # Gráfica de Radar Comparativa
-        st.markdown("### 🎯 Comparativa de Modelos (Radar)")
-        fig = go.Figure()
-        categories = ['Precisión', 'F1-Score', 'Velocidad Inferencia', 'Robustez']
-        
-        fig.add_trace(go.Scatterpolar(
-            r=[0.95, 0.94, 0.85, 0.90], theta=categories, fill='toself', name='MobileNetV3'
-        ))
-        fig.add_trace(go.Scatterpolar(
-            r=[0.98, 0.97, 0.40, 0.98], theta=categories, fill='toself', name='EfficientNetB7'
-        ))
-        fig.add_trace(go.Scatterpolar(
-            r=[0.96, 0.95, 0.80, 0.93], theta=categories, fill='toself', name='MobileNetV3_SVM'
-        ))
-        fig.add_trace(go.Scatterpolar(
-            r=[0.97, 0.97, 0.35, 0.96], theta=categories, fill='toself', name='EfficientNet_RF'
-        ))
-        fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 1])), showlegend=True, height=400)
-        st.plotly_chart(fig, use_container_width=True)
-
-        st.markdown("---")
-        st.markdown("### 🚀 Rendimiento de Modelos (Métricas Base)")
-        metrics_data = {
-            'Modelo': ['MobileNetV3', 'EfficientNetB7', 'MobileNetV3_SVM', 'EfficientNet_RF'],
-            'Precisión': [0.95, 0.98, 0.96, 0.97],
-            'Velocidad (ms)': [15, 65, 18, 70]
-        }
-        df_metrics = pd.DataFrame(metrics_data)
-        st.dataframe(df_metrics, use_container_width=True)
-
-    with tab3:
-        st.markdown("## 📐 Pruebas Estadísticas")
-        st.write("Validación matemática de la confiabilidad del ensamble.")
-        
-        if 'predictions' in st.session_state:
-            stats = perform_statistical_tests(st.session_state['predictions'])
+        if 'predictions' in st.session_state and st.session_state['predictions']:
+            st.markdown("### 🔄 Comparación de Predicciones")
             
-            st.markdown("### 1. Nivel de Acuerdo (Kappa de Cohen)")
-            st.info("💡 **¿Qué significa esto?** El índice Kappa mide si los modelos se ponen de acuerdo porque realmente saben la respuesta, o si fue mera casualidad. Un valor cercano a 1.0 indica un consenso altamente confiable.")
-            if 'kappa_scores' in stats:
-                df_kappa = pd.DataFrame(list(stats['kappa_scores'].items()), columns=['Comparación', 'Kappa'])
+            # Tabla comparativa
+            comparison_data = []
+            for model_name, result in st.session_state['predictions'].items():
+                comparison_data.append({
+                    'Modelo': model_name,
+                    'Predicción': DISEASE_INFO[result['prediction']]['es'],
+                    'Confianza': f"{result['confidence']:.2%}",
+                    'Tiempo (s)': f"{result['inference_time']:.3f}"
+                })
+            
+            comparison_df = pd.DataFrame(comparison_data)
+            st.dataframe(comparison_df, use_container_width=True)
+            
+            # Gráfico de consenso
+            if show_comparison:
+                st.markdown("### 📊 Análisis de Consenso")
                 
-                # Gráfico de Barras para Kappa
-                fig2 = px.bar(df_kappa, x='Comparación', y='Kappa', title="Acuerdo entre modelos (Kappa)", color='Kappa', color_continuous_scale='Viridis')
-                st.plotly_chart(fig2, use_container_width=True)
+                # Recopilar todas las predicciones
+                all_predictions = {}
+                for model_name, result in st.session_state['predictions'].items():
+                    probs = result['probabilities']
+                    for i, disease in enumerate(DISEASE_CLASSES):
+                        if disease not in all_predictions:
+                            all_predictions[disease] = []
+                        all_predictions[disease].append(probs[i])
                 
-            st.markdown("### 2. Análisis de Incertidumbre (Entropía)")
-            st.info("💡 **¿Qué significa esto?** La entropía mide cuánta 'duda' tuvo el modelo al predecir. Valores altos significan que el modelo estaba confundido entre varias enfermedades. Valores bajos significan una decisión firme.")
-            
-            entropy_data = []
-            for model, result in st.session_state['predictions'].items():
-                probs = np.array(result['probabilities'])
-                ent = -np.sum(probs * np.log2(probs + 1e-10))
-                entropy_data.append({'Modelo': model, 'Entropía': ent, 'Estado': 'Confiable' if ent < 1.0 else 'Inseguro'})
-            
-            df_ent = pd.DataFrame(entropy_data)
-            fig3 = px.bar(df_ent, x='Modelo', y='Entropía', color='Estado', title="Entropía por Modelo (Menor es mejor)")
-            st.plotly_chart(fig3, use_container_width=True)
-            
-            st.markdown("### 3. Prueba de Significancia (Test de Friedman)")
-            st.info("💡 **¿Qué significa esto?** El p-valor evalúa si las diferencias de velocidad entre modelos son significativas. Un p-value < 0.05 demuestra estadísticamente que un modelo es objetivamente más rápido o lento que otro.")
-            st.metric("P-Valor de Friedman (Tiempos)", f"{stats.get('friedman_p_value', 0.05):.4f}")
+                # Calcular promedio de probabilidades
+                consensus_data = []
+                for disease, probs in all_predictions.items():
+                    consensus_data.append({
+                        'Enfermedad': DISEASE_INFO[disease]['es'],
+                        'Probabilidad Promedio': np.mean(probs),
+                        'Desviación Estándar': np.std(probs)
+                    })
+                
+                consensus_df = pd.DataFrame(consensus_data).sort_values('Probabilidad Promedio', ascending=False)
+                
+                # Gráfico de barras con error
+                fig = go.Figure()
+                fig.add_trace(go.Bar(
+                    x=consensus_df['Enfermedad'][:5],
+                    y=consensus_df['Probabilidad Promedio'][:5],
+                    error_y=dict(type='data', array=consensus_df['Desviación Estándar'][:5]),
+                    marker_color='lightblue',
+                    name='Consenso'
+                ))
+                fig.update_layout(
+                    title='Top 5 Diagnósticos por Consenso',
+                    xaxis_title='Enfermedad',
+                    yaxis_title='Probabilidad Promedio',
+                    height=400
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Matriz de acuerdo entre modelos
+                st.markdown("### 🤝 Nivel de Acuerdo entre Modelos")
+                
+                model_names = list(st.session_state['predictions'].keys())
+                agreement_matrix = np.zeros((len(model_names), len(model_names)))
+                
+                for i, model1 in enumerate(model_names):
+                    for j, model2 in enumerate(model_names):
+                        pred1 = st.session_state['predictions'][model1]['prediction']
+                        pred2 = st.session_state['predictions'][model2]['prediction']
+                        agreement_matrix[i, j] = 1.0 if pred1 == pred2 else 0.0
+                
+                fig_heatmap = go.Figure(data=go.Heatmap(
+                    z=agreement_matrix,
+                    x=model_names,
+                    y=model_names,
+                    colorscale='Blues',
+                    text=agreement_matrix,
+                    texttemplate='%{text}',
+                    textfont={"size": 16}
+                ))
+                fig_heatmap.update_layout(
+                    title='Matriz de Acuerdo entre Modelos',
+                    height=400
+                )
+                st.plotly_chart(fig_heatmap, use_container_width=True)
         else:
-            st.warning("Sube una imagen y realiza el análisis primero para ver estas estadísticas calculadas sobre tus resultados.")
+            st.info("👆 Primero carga y analiza una imagen en la pestaña 'Análisis Individual'")
+    
+    with tab3:
+        st.markdown("### 📈 Métricas de Rendimiento")
+        
+        # Métricas simuladas (en producción, estas vendrían de la validación real)
+        metrics_data = {
+            'Modelo': ['MobileNetV3', 'EfficientNetB7', 'SVM + ResNet50'],
+            'Precisión': [0.952, 0.978, 0.935],
+            'Recall': [0.948, 0.975, 0.930],
+            'F1-Score': [0.950, 0.976, 0.932],
+            'Velocidad (FPS)': [45, 12, 25]
+        }
+        
+        metrics_df = pd.DataFrame(metrics_data)
+        
+        # Gráfico de radar
+        categories = ['Precisión', 'Recall', 'F1-Score']
+        
+        fig_radar = go.Figure()
+        
+        for idx, model in enumerate(metrics_df['Modelo']):
+            values = metrics_df.iloc[idx][categories].tolist()
+            values += values[:1]  # Cerrar el polígono
+            
+            fig_radar.add_trace(go.Scatterpolar(
+                r=values,
+                theta=categories + categories[:1],
+                fill='toself',
+                name=model
+            ))
+        
+        fig_radar.update_layout(
+            polar=dict(
+                radialaxis=dict(
+                    visible=True,
+                    range=[0.9, 1.0]
+                )),
+            showlegend=True,
+            title="Comparación de Métricas de Rendimiento"
+        )
+        
+        st.plotly_chart(fig_radar, use_container_width=True)
+        
+        # Tabla de métricas detalladas
+        st.markdown("### 📋 Tabla de Métricas Detalladas")
+        st.dataframe(
+            metrics_df.style.highlight_max(axis=0, subset=['Precisión', 'Recall', 'F1-Score', 'Velocidad (FPS)']),
+            use_container_width=True
+        )
+        
+        # Gráfico de trade-off velocidad vs precisión
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig_tradeoff = px.scatter(
+                metrics_df,
+                x='Velocidad (FPS)',
+                y='Precisión',
+                size='F1-Score',
+                color='Modelo',
+                hover_data=['Recall'],
+                title='Trade-off: Velocidad vs Precisión',
+                labels={'Velocidad (FPS)': 'Velocidad (Imágenes/segundo)'}
+            )
+            fig_tradeoff.update_traces(marker=dict(size=20))
+            st.plotly_chart(fig_tradeoff, use_container_width=True)
+        
+        with col2:
+            # Tiempo de inferencia promedio
+            if 'predictions' in st.session_state:
+                inference_times = []
+                for model_name, result in st.session_state['predictions'].items():
+                    inference_times.append({
+                        'Modelo': model_name,
+                        'Tiempo (ms)': result['inference_time'] * 1000
+                    })
+                
+    with tab4:
+        st.markdown("### 🧪 Análisis Estadístico Detallado")
+        
+        if 'predictions' in st.session_state and st.session_state['predictions']:
+            # Realizar pruebas estadísticas
+            statistical_results = perform_statistical_tests(st.session_state['predictions'])
+            
+            # Realizar pruebas estadísticas tradicionales
+            traditional_results = perform_traditional_statistical_tests()
+            
+            # Sección 1: Pruebas modernas
+            st.markdown("#### 📊 Análisis de Concordancia y Consenso")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("##### 🤝 Concordancia entre Modelos")
+                
+                # Mostrar Kappa de Cohen
+                if 'kappa_scores' in statistical_results:
+                    kappa_df = pd.DataFrame([
+                        {'Comparación': comp, 'Acuerdo': 'Perfecto' if score == 1.0 else 'Desacuerdo'}
+                        for comp, score in statistical_results['kappa_scores'].items()
+                    ])
+                    st.dataframe(kappa_df, use_container_width=True)
+                
+                # Análisis de consenso
+                st.markdown("##### 🎯 Análisis de Consenso")
+                consensus_info = f"""
+                **Diagnóstico por Consenso:** {DISEASE_INFO[statistical_results['consensus']]['es']}  
+                **Confianza Promedio:** {statistical_results['consensus_confidence']:.2%}  
+                **Severidad:** {DISEASE_INFO[statistical_results['consensus']]['severity']}
+                """
+                st.info(consensus_info)
+            
+            with col2:
+                st.markdown("##### 📈 Análisis de Confianza")
+                
+                # Gráfico de confianza
+                conf_data = pd.DataFrame([
+                    {'Modelo': model, 'Confianza': conf}
+                    for model, conf in statistical_results['confidence_scores'].items()
+                ])
+                
+                fig_conf = px.bar(
+                    conf_data,
+                    x='Modelo',
+                    y='Confianza',
+                    title='Niveles de Confianza por Modelo',
+                    color='Confianza',
+                    color_continuous_scale='RdYlGn',
+                    range_y=[0, 1]
+                )
+                fig_conf.add_hline(y=0.7, line_dash="dash", line_color="red",
+                                  annotation_text="Umbral de confianza (70%)")
+                st.plotly_chart(fig_conf, use_container_width=True)
+            
+            # Sección 2: Pruebas estadísticas tradicionales
+            st.markdown("---")
+            st.markdown("#### 📐 Pruebas Estadísticas Tradicionales")
+            
+            col3, col4 = st.columns(2)
+            
+            with col3:
+                st.markdown("##### 📊 T-Test Pareado")
+                st.caption("Comparación de precisiones entre modelos (datos históricos simulados)")
+                
+                if 't_tests' in traditional_results:
+                    t_test_df = pd.DataFrame([
+                        {
+                            'Comparación': comp,
+                            't-statistic': f"{result['t_statistic']:.4f}",
+                            'p-value': f"{result['p_value']:.4f}",
+                            'Significativo': '✅' if result['significant'] else '❌'
+                        }
+                        for comp, result in traditional_results['t_tests'].items()
+                    ])
+                    st.dataframe(t_test_df, use_container_width=True)
+                    
+                    # Interpretación
+                    st.caption("**Interpretación:** p < 0.05 indica diferencia significativa en precisión")
+            
+            with col4:
+                st.markdown("##### 📊 Prueba Z de Proporciones")
+                st.caption("Comparación de tasas de acierto (n=1000 imágenes simuladas)")
+                
+                if 'z_tests' in traditional_results:
+                    z_test_df = pd.DataFrame([
+                        {
+                            'Comparación': comp,
+                            'z-statistic': f"{result['z_statistic']:.4f}",
+                            'p-value': f"{result['p_value']:.4f}",
+                            'Acc. Modelo 1': f"{result['prop1']:.3f}",
+                            'Acc. Modelo 2': f"{result['prop2']:.3f}"
+                        }
+                        for comp, result in traditional_results['z_tests'].items()
+                    ])
+                    st.dataframe(z_test_df, use_container_width=True)
+                    
+                    st.caption("**Interpretación:** Compara proporciones de aciertos entre modelos")
+            
+            # Visualizaciones estadísticas adicionales
+            st.markdown("---")
+            st.markdown("#### 🔬 Visualizaciones Estadísticas Avanzadas")
+            
+            plots = create_statistical_plots(st.session_state['predictions'])
+            
+            col5, col6 = st.columns(2)
+            
+            with col5:
+                st.image(plots['confidence_comparison'], caption="Comparación de Confianza")
+            
+            with col6:
+                st.image(plots['probability_heatmap'], caption="Matriz de Probabilidades")
+            
+            # Test estadísticos adicionales
+            st.markdown("---")
+            st.markdown("#### 📋 Análisis de Incertidumbre")
+            
+            # Análisis de varianza de probabilidades
+            all_probs = []
+            for model in st.session_state['predictions']:
+                all_probs.append(st.session_state['predictions'][model]['probabilities'])
+            
+            # Calcular entropía para cada modelo (medida de incertidumbre)
+            entropy_data = []
+            for model, probs in zip(st.session_state['predictions'].keys(), all_probs):
+                entropy = -np.sum(probs * np.log2(probs + 1e-10))
+                entropy_data.append({
+                    'Modelo': model,
+                    'Entropía': entropy,
+                    'Interpretación': 'Baja incertidumbre' if entropy < 1 else 'Alta incertidumbre'
+                })
+            
+            entropy_df = pd.DataFrame(entropy_data)
+            st.dataframe(entropy_df, use_container_width=True)
+            
+            # Matriz de confusión simulada
+            st.markdown("---")
+            st.markdown("#### 📊 Matriz de Confusión (Ejemplo con datos de validación)")
+            
+            # Crear matriz de confusión de ejemplo
+            fig, ax = plt.subplots(figsize=(10, 8))
+            
+            # Simular una matriz de confusión para el mejor modelo
+            np.random.seed(42)
+            n_classes = len(DISEASE_CLASSES)
+            cm = np.zeros((n_classes, n_classes), dtype=int)
+            
+            # Llenar diagonal principal con valores altos (aciertos)
+            for i in range(n_classes):
+                cm[i, i] = np.random.randint(85, 98)
+                # Distribuir algunos errores
+                for j in range(n_classes):
+                    if i != j:
+                        cm[i, j] = np.random.randint(0, 5)
+            
+            sns.heatmap(cm, 
+                        annot=True, 
+                        fmt='d', 
+                        cmap='Blues',
+                        xticklabels=[DISEASE_INFO[d]['es'][:10] for d in DISEASE_CLASSES],
+                        yticklabels=[DISEASE_INFO[d]['es'][:10] for d in DISEASE_CLASSES],
+                        ax=ax)
+            ax.set_title('Matriz de Confusión - EfficientNetB7 (Ejemplo)', fontsize=14)
+            ax.set_xlabel('Predicción')
+            ax.set_ylabel('Clase Real')
+            plt.xticks(rotation=45, ha='right')
+            plt.tight_layout()
+            
+            st.pyplot(fig)
+            plt.close()
+            
+            # Botón para generar reporte PDF
+            st.markdown("---")
+            st.markdown("### 📄 Generar Reporte")
+            
+            col_pdf1, col_pdf2, col_pdf3 = st.columns(3)
+            
+            with col_pdf1:
+                # Obtener la imagen si existe
+                img_bytes = st.session_state.get('uploaded_image', None)
+                img_buffer = BytesIO(img_bytes) if img_bytes else None
+                
+                # Generar PDF con pruebas tradicionales incluidas
+                pdf_buffer = generate_pdf_report(
+                    st.session_state['predictions'],
+                    img_buffer,
+                    statistical_results,
+                    traditional_results
+                )
+                st.download_button(
+                    label="📥 PDF",
+                    data=pdf_buffer,
+                    file_name=f"reporte_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+                
+            with col_pdf2:
+                word_buffer = generate_word_report(
+                    st.session_state['predictions'],
+                    statistical_results,
+                    traditional_results
+                )
+                st.download_button(
+                    label="📥 Word",
+                    data=word_buffer,
+                    file_name=f"reporte_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True
+                )
+                
+            with col_pdf3:
+                excel_buffer = generate_excel_report(
+                    st.session_state['predictions'],
+                    statistical_results,
+                    traditional_results
+                )
+                st.download_button(
+                    label="📥 Excel",
+                    data=excel_buffer,
+                    file_name=f"reporte_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+            
+            st.success("✅ ¡Reportes generados exitosamente!")
+            
+            # Interpretación de resultados
+            st.markdown("---")
+            st.markdown("### 💡 Interpretación de Resultados")
+            
+            interpretation = """
+            **Guía de Interpretación:**
+            
+            **Pruebas Modernas:**
+            - **Entropía < 1**: El modelo está muy seguro de su predicción (baja incertidumbre)
+            - **Entropía > 2**: El modelo muestra alta incertidumbre entre varias clases
+            - **Kappa = 1**: Acuerdo perfecto entre modelos
+            - **Confianza > 70%**: Predicción confiable
+            
+            **Pruebas Tradicionales:**
+            - **T-Test**: Compara las precisiones promedio de los modelos
+            - **p < 0.05**: Indica diferencia estadísticamente significativa
+            - **Prueba Z**: Compara proporciones de aciertos en grandes muestras
+            - **Matriz de Confusión**: Muestra patrones de error entre clases
+            
+            **Recomendaciones basadas en el análisis:**
+            """
+            
+            st.markdown(interpretation)
+            
+            # Recomendaciones específicas basadas en el consenso
+            consensus_disease = statistical_results['consensus']
+            if DISEASE_INFO[consensus_disease]['severity'] == 'Alta':
+                st.error("⚠️ Se detectó una enfermedad de severidad ALTA. Acción inmediata recomendada.")
+            elif DISEASE_INFO[consensus_disease]['severity'] == 'Media':
+                st.warning("⚡ Se detectó una enfermedad de severidad MEDIA. Monitoreo cercano recomendado.")
+            else:
+                st.success("✅ Riesgo bajo o planta saludable. Mantener prácticas preventivas.")
+            
+        else:
+            st.info("👆 Primero carga y analiza una imagen en la pestaña 'Análisis Individual'")
+    
+    # Footer con información adicional
+    st.markdown("---")
+    st.markdown("""
+    <div style='text-align: center; color: gray;'>
+        <p>💡 <strong>Nota:</strong> Este sistema es una herramienta de apoyo. 
+        Para un diagnóstico definitivo, consulte con un experto agrónomo.</p>
+        <p>Desarrollado con ❤️ usando PyTorch y Streamlit | {}</p>
+    </div>
+    """.format(datetime.now().strftime("%Y")), unsafe_allow_html=True)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

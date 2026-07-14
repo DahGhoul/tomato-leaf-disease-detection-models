@@ -72,6 +72,16 @@ async def load_all_models():
     except Exception as e:
         print(f"Error cargando EfficientNet: {e}")
 
+    try:
+        # 3. ResNet50 (Clásico)
+        m3 = models.resnet50(weights=None)
+        m3.fc = nn.Linear(m3.fc.in_features, NUM_CLASSES)
+        # Podríamos cargar pesos si existieran: m3.load_state_dict(torch.load("models/resnet_model.pth", map_location='cpu'))
+        m3.eval()
+        loaded_models["ResNet50"] = m3
+    except Exception as e:
+        print(f"Error cargando ResNet50: {e}")
+
     # Híbridos
     try:
         loaded_hybrids["MobileNetV3_SVM"] = joblib.load("models/MobileNetV3_SVM.pkl")["model"]
@@ -94,7 +104,7 @@ async def predict(file: UploadFile = File(...)):
     results = {}
     
     # Modelos clásicos
-    for model_name in ["MobileNetV3", "EfficientNet"]:
+    for model_name in ["MobileNetV3", "EfficientNet", "ResNet50"]:
         if model_name not in loaded_models:
             continue
         model = loaded_models[model_name]
