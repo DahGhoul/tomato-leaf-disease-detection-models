@@ -1001,6 +1001,8 @@ def main():
             
             if uploaded_file is not None:
                 image = Image.open(uploaded_file)
+                if image.mode in ('RGBA', 'P'):
+                    image = image.convert('RGB')
                 st.image(image, caption="Imagen cargada", use_column_width=True)
                 
                 if st.button("🚀 Iniciar Análisis Completo", use_container_width=True):
