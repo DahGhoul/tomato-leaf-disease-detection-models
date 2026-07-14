@@ -1469,7 +1469,6 @@ def main():
             chart_placeholder = st.empty()
             
             if start_train:
-                import pandas as pd
                 train_data = {'Epoch': [], 'Loss': [], 'Accuracy': []}
                 
                 def prog_callback(prog):
