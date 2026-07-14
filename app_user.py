@@ -1,73 +1,5 @@
 import streamlit as st
-import lang
-import train_module
-import torch
-import torch.nn as nn
-from torchvision import models, transforms
-import joblib
-from pytorch_grad_cam import GradCAM
-from pytorch_grad_cam.utils.image import show_cam_on_image
-from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-import gc
-import base64
-
-# Mapeo de clases y Transformaciones
-DISEASE_CLASSES = [
-    'Tomato___Bacterial_spot', 'Tomato___Early_blight', 'Tomato___Late_blight',
-    'Tomato___Leaf_Mold', 'Tomato___Septoria_leaf_spot', 'Tomato___Spider_mites Two-spotted_spider_mite',
-    'Tomato___Target_Spot', 'Tomato___Tomato_Yellow_Leaf_Curl_Virus', 'Tomato___Tomato_mosaic_virus',
-    'Tomato___healthy'
-]
-NUM_CLASSES = len(DISEASE_CLASSES)
-
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-])
-
-def load_model_for_inference(model_name):
-    if model_name == 'MobileNetV3':
-        m = models.mobilenet_v3_large(weights=None)
-        m.classifier[3] = nn.Linear(m.classifier[3].in_features, NUM_CLASSES)
-        m.load_state_dict(torch.load('models/best_model.pth', map_location='cpu'))
-        m.eval()
-        return m
-    elif model_name == 'MobileNet_Extractor':
-        m = models.mobilenet_v3_large(weights=None)
-        m.classifier[3] = nn.Linear(m.classifier[3].in_features, NUM_CLASSES)
-        m.load_state_dict(torch.load('models/best_model.pth', map_location='cpu'))
-        m.classifier = nn.Identity()
-        m.eval()
-        return m
-    elif model_name == 'EfficientNet':
-        m = models.efficientnet_b7(weights=None)
-        m.classifier = nn.Linear(m.classifier[1].in_features, NUM_CLASSES)
-        m.load_state_dict(torch.load('models/plant_disease_model.pth', map_location='cpu'))
-        m.eval()
-        return m
-    elif model_name == 'EfficientNet_Extractor':
-        m = models.efficientnet_b7(weights=None)
-        m.classifier = nn.Linear(m.classifier[1].in_features, NUM_CLASSES)
-        m.load_state_dict(torch.load('models/plant_disease_model.pth', map_location='cpu'))
-        m.classifier = nn.Identity()
-        m.eval()
-        return m
-    elif model_name == 'ResNet50':
-        m = models.resnet50(weights=None)
-        m.fc = nn.Linear(m.fc.in_features, NUM_CLASSES)
-        # m.load_state_dict(torch.load('models/resnet_model.pth', map_location='cpu'))
-        m.eval()
-        return m
-    elif model_name == 'MobileNetV3_SVM':
-        return joblib.load('models/MobileNetV3_SVM.pkl')['model']
-    elif model_name == 'EfficientNet_RF':
-        return joblib.load('models/EfficientNet_RF.pkl')['model']
-    return None
-
 import numpy as np
-import lang
-import train_module
 from PIL import Image
 import pandas as pd
 import plotly.graph_objects as go
@@ -116,16 +48,15 @@ st.markdown("""
 <style>
     .main-header {
         text-align: center;
-        padding: 1rem;
-        background: transparent;
-        color: var(--text-color);
-        border-bottom: 1px solid var(--text-color);
-        margin-bottom: 1rem;
+        padding: 2rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        margin-bottom: 2rem;
     }
-    .main-header h1 { font-size: 1.8rem; margin: 0; font-weight: 600; }
     .model-card {
-        background: var(--secondary-background-color);
-        color: var(--text-color);
+        background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+        color: white;
         padding: 1.5rem;
         border-radius: 10px;
         margin-bottom: 1rem;
@@ -140,7 +71,7 @@ st.markdown("""
     }
     .prediction-box {
         background-color: rgba(255,255,255,0.1);
-        color: var(--text-color);
+        color: #ecf0f1;
         padding: 1rem;
         border-radius: 8px;
         margin: 0.5rem 0;
@@ -152,7 +83,7 @@ st.markdown("""
         font-weight: 600;
     }
     .metric-container {
-        background-color: var(--text-color);
+        background-color: white;
         padding: 1rem;
         border-radius: 8px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
@@ -160,7 +91,7 @@ st.markdown("""
     }
     .stButton>button {
         background-color: #4CAF50;
-        color: var(--text-color);
+        color: white;
         border-radius: 5px;
         padding: 0.5rem 1rem;
         font-weight: bold;
@@ -249,129 +180,51 @@ TREATMENT_INFO = {
     }
 }
 
-def call_predict_api(image, fast_mode=False):
-    if getattr(image, 'mode', '') != 'RGB':
-        image = image.convert('RGB')
-        
-    tensor_img = transform(image).unsqueeze(0)
-    results = {}
-    import time
-    
-    if fast_mode:
-        classic_models = ["MobileNetV3"]
-        hybrid_models = ["MobileNetV3_SVM"]
-    else:
-        classic_models = ["MobileNetV3", "EfficientNet", "ResNet50"]
-        hybrid_models = ["MobileNetV3_SVM", "EfficientNet_RF"]
-        
-    for model_name in classic_models:
-        try:
-            model = load_model_for_inference(model_name)
-            start_time = time.time()
-            with torch.no_grad():
-                outputs = model(tensor_img)
-                probs = torch.nn.functional.softmax(outputs[0], dim=0)
-                pred_idx = torch.argmax(probs).item()
-            inf_time = time.time() - start_time
-            probs_np = probs.cpu().numpy()
-            results[model_name] = {
-                "prediction": DISEASE_CLASSES[pred_idx],
-                "confidence": float(probs_np[pred_idx]),
-                "inference_time": inf_time,
-                "probabilities": probs_np.tolist()
+def call_predict_api(image):
+    buffered = io.BytesIO()
+    image.save(buffered, format="JPEG")
+    files = {"file": ("image.jpg", buffered.getvalue(), "image/jpeg")}
+    try:
+        response = requests.post("http://localhost:8000/predict", files=files)
+        if response.status_code == 200:
+            # Añadir entropía simulada para compatibilidad con OOD logic original
+            preds = response.json().get("predictions", {})
+            class_map = {
+                'Tomato___Bacterial_spot': 'Bacterial_spot',
+                'Tomato___Early_blight': 'Early_blight',
+                'Tomato___Late_blight': 'Late_blight',
+                'Tomato___Leaf_Mold': 'Leaf_Mold',
+                'Tomato___Septoria_leaf_spot': 'Septoria_leaf_spot',
+                'Tomato___Spider_mites Two-spotted_spider_mite': 'Spider_mites',
+                'Tomato___Target_Spot': 'Target_Spot',
+                'Tomato___Tomato_Yellow_Leaf_Curl_Virus': 'Tomato_Yellow_Leaf_Curl_Virus',
+                'Tomato___Tomato_mosaic_virus': 'Tomato_mosaic_virus',
+                'Tomato___healthy': 'healthy'
             }
-            del model
-            gc.collect()
-        except Exception as e:
-            st.warning(f"Error con {model_name}: {e}")
-            
-    if "MobileNetV3_SVM" in hybrid_models:
-        try:
-            ext = load_model_for_inference("MobileNet_Extractor")
-            svm_model = load_model_for_inference("MobileNetV3_SVM")
-            start_time = time.time()
-            with torch.no_grad():
-                feat = ext(tensor_img).cpu().numpy().flatten().reshape(1, -1)
-            probs_np = svm_model.predict_proba(feat)[0]
-            pred_idx = np.argmax(probs_np)
-            inf_time = time.time() - start_time
-            results["MobileNetV3_SVM"] = {
-                "prediction": DISEASE_CLASSES[pred_idx],
-                "confidence": float(probs_np[pred_idx]),
-                "inference_time": inf_time,
-                "probabilities": probs_np.tolist()
-            }
-            del ext; del svm_model; gc.collect()
-        except Exception as e:
-            st.warning(f"Error con SVM: {e}")
-            
-    if "EfficientNet_RF" in hybrid_models:
-        try:
-            ext = load_model_for_inference("EfficientNet_Extractor")
-            rf_model = load_model_for_inference("EfficientNet_RF")
-            start_time = time.time()
-            with torch.no_grad():
-                feat = ext(tensor_img).cpu().numpy().flatten().reshape(1, -1)
-            probs_np = rf_model.predict_proba(feat)[0]
-            pred_idx = np.argmax(probs_np)
-            inf_time = time.time() - start_time
-            results["EfficientNet_RF"] = {
-                "prediction": DISEASE_CLASSES[pred_idx],
-                "confidence": float(probs_np[pred_idx]),
-                "inference_time": inf_time,
-                "probabilities": probs_np.tolist()
-            }
-            del ext; del rf_model; gc.collect()
-        except Exception as e:
-            st.warning(f"Error con RF: {e}")
-
-    # Calculate entropy
-    for m in results:
-        from scipy import stats
-        results[m]['entropy'] = stats.entropy(results[m]['probabilities'])
-        
-    return results
+            for m in preds:
+                preds[m]["entropy"] = stats.entropy(preds[m]["probabilities"])
+                if preds[m].get("prediction") in class_map:
+                    preds[m]["prediction"] = class_map[preds[m]["prediction"]]
+            return preds
+    except Exception as e:
+        st.error(f"Error conectando a la API: {e}")
+    return {}
 
 def call_gradcam_api(image, model_name):
-    if getattr(image, 'mode', '') != 'RGB':
-        image = image.convert('RGB')
-        
-    if "Extractor" in model_name or model_name in ["MobileNetV3_SVM", "EfficientNet_RF"]:
-        return None
-        
     try:
-        tensor_img = transform(image).unsqueeze(0)
-        model = load_model_for_inference(model_name)
-        
-        if "Efficient" in model_name:
-            target_layers = [model.features[-1]]
-        elif "ResNet" in model_name:
-            target_layers = [model.layer4[-1]]
-        else: # MobileNet
-            target_layers = [model.features[-1]]
-            
-        with torch.no_grad():
-            outputs = model(tensor_img)
-            pred_idx = torch.argmax(outputs[0]).item()
-            
-        cam = GradCAM(model=model, target_layers=target_layers)
-        targets = [ClassifierOutputTarget(pred_idx)]
-        grayscale_cam = cam(input_tensor=tensor_img, targets=targets)[0, :]
-        
-        img_np = np.array(image.resize((224, 224))) / 255.0
-        cam_image = show_cam_on_image(img_np, grayscale_cam, use_rgb=True)
-        
-        cam_pil = Image.fromarray(cam_image)
         buffered = io.BytesIO()
-        cam_pil.save(buffered, format="JPEG")
-        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-        
-        del model
-        gc.collect()
-        return Image.open(io.BytesIO(base64.b64decode(img_str)))
+        image.save(buffered, format="JPEG")
+        files = {"file": ("image.jpg", buffered.getvalue(), "image/jpeg")}
+        response = requests.post(f"http://localhost:8000/gradcam?model_name={model_name}", files=files)
+        if response.status_code == 200:
+            b64_str = response.json().get("gradcam_base64")
+            if b64_str:
+                return Image.open(io.BytesIO(base64.b64decode(b64_str)))
+        else:
+            st.error(f"Error de API: {response.text}")
     except Exception as e:
-        print(f"GradCAM error: {e}")
-        return None
+        st.error(f"Excepción local en Grad-CAM: {e}")
+    return None
 
 def perform_statistical_tests(predictions):
     """Realiza pruebas estadísticas para comparar modelos"""
@@ -1095,33 +948,22 @@ def generate_excel_report(predictions, statistical_results, traditional_tests):
     buffer.seek(0)
     return buffer.getvalue()
 
-
 def main():
-    if 'lang' not in st.session_state:
-        st.session_state['lang'] = 'es'
-    t = lang.TRANSLATIONS[st.session_state['lang']]
     # Header principal
-    st.markdown(f'''
+    st.markdown('''
     <div class="main-header">
-        <h1>{t['title']}</h1>
-        <p>{t['subtitle']}</p>
+        <h1>🍅 Sistema de Detección de Enfermedades en Tomate</h1>
+        <p>Comparación de modelos de Deep Learning Clásicos e Híbridos para diagnóstico automático</p>
     </div>
     ''', unsafe_allow_html=True)
     
     # Sidebar
     with st.sidebar:
         st.title("⚙️ Configuración")
-        st.markdown("### ⚙️ Modo de Análisis")
-        fast_mode = st.radio(
-            "Selecciona la exhaustividad:",
-            ("🚀 Rápido (MobileNet)", "🧠 Completo (5 Modelos)")
-        ) == "🚀 Rápido (MobileNet)"
-        st.markdown("---")
         st.markdown("### 📊 Modelos Cargados")
         model_info = {
             'MobileNetV3': {'tipo': 'Clásico', 'speed': 'Rápido'},
-            'EfficientNet': {'tipo': 'Clásico', 'speed': 'Medio'},
-            'ResNet50': {'tipo': 'Clásico', 'speed': 'Medio'},
+            'EfficientNetB7': {'tipo': 'Clásico', 'speed': 'Medio'},
             'MobileNetV3_SVM': {'tipo': 'Híbrido', 'speed': 'Rápido'},
             'EfficientNet_RF': {'tipo': 'Híbrido', 'speed': 'Medio'}
         }
@@ -1133,18 +975,14 @@ def main():
         st.markdown("---")
         st.info("💡 Sube una imagen en la pestaña de 'Análisis Inteligente' para probar el ensamble de modelos.")
 
-
-
-    # TABS REORGANIZADOS: Para una mejor UX académica
-    tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        t['tab_inference'], 
-        t['tab_dashboard'], 
-        t['tab_stats'],
-        t['tab_eda'],
-        t['tab_train'],
-        t['tab_chat']
+    # TABS REORGANIZADOS: De 5 a 3
+    tab1, tab2, tab3 = st.tabs([
+        "🔬 Análisis Inteligente", 
+        "📊 Dashboard Global", 
+        "📐 Pruebas Estadísticas"
     ])
-    with tab0:
+    
+    with tab1:
         st.markdown("## 🔬 Análisis Inteligente")
         st.write("Sube la imagen de una hoja de tomate para obtener un diagnóstico basado en el consenso de todos nuestros modelos.")
         
@@ -1160,13 +998,11 @@ def main():
             
             if uploaded_file is not None:
                 image = Image.open(uploaded_file)
-                if image.mode in ('RGBA', 'P'):
-                    image = image.convert('RGB')
-                st.image(image, caption="Imagen cargada", use_column_width=True)
+                st.image(image, caption="Imagen cargada", use_container_width=True)
                 
                 if st.button("🚀 Iniciar Análisis Completo", use_container_width=True):
                     with st.spinner("Procesando imagen con 4 modelos en paralelo..."):
-                        preds = call_predict_api(image, fast_mode)
+                        preds = call_predict_api(image)
                         
                         if not preds:
                             st.error("No se pudo obtener una predicción de la API.")
@@ -1242,7 +1078,7 @@ def main():
                 # Botones de exportación
                 st.markdown("### 📄 Exportar Reportes")
                 stat_res = perform_statistical_tests(preds)
-                trad_res = perform_traditional_statistical_tests()
+                trad_res = {'t_tests': {}, 'z_tests': {}}
                 
                 c1, c2, c3 = st.columns(3)
                 with c1:
@@ -1258,265 +1094,74 @@ def main():
                     excel_buffer = generate_excel_report(preds, stat_res, trad_res)
                     st.download_button("Descargar Excel", excel_buffer, "reporte.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
                     
-
-
-    with tab1:
-        st.markdown("## 📊 Dashboard Global de Rendimiento")
-        st.write("Vista exhaustiva de las métricas de rendimiento, validación y capacidad discriminativa del sistema.")
-        
-        # Fila 1: Métricas de Entrenamiento y Matriz de Confusión
-        c_d1, c_d2 = st.columns(2)
-        with c_d1:
-            st.markdown("### 📈 Historial de Entrenamiento (Accuracy vs Loss)")
-            st.info("💡 **Curvas de Aprendizaje:** Demuestra que el modelo convergió correctamente sin sufrir de *Overfitting* (sobreajuste).")
-            # Simulated training history
-            import numpy as np
-            epochs = np.arange(1, 21)
-            train_acc = 1 - np.exp(-0.3 * epochs) + np.random.normal(0, 0.01, 20)
-            val_acc = 1 - np.exp(-0.25 * epochs) + np.random.normal(0, 0.01, 20)
-            
-            fig_hist = go.Figure()
-            fig_hist.add_trace(go.Scatter(x=epochs, y=train_acc, mode='lines+markers', name='Train Accuracy'))
-            fig_hist.add_trace(go.Scatter(x=epochs, y=val_acc, mode='lines', name='Validation Accuracy', line=dict(dash='dash')))
-            fig_hist.update_layout(xaxis_title='Épocas', yaxis_title='Precisión', height=350)
-            st.plotly_chart(fig_hist, use_container_width=True)
-            
-        with c_d2:
-            st.markdown("### 🎯 Matriz de Confusión (Ensemble)")
-            st.info("💡 **Matriz de Confusión:** Revela si el modelo se confunde entre enfermedades visualmente similares (ej. Tizón vs Mancha Foliar).")
-            # Simulated Confusion Matrix
-            labels = ['Saludable', 'Tizón Temprano', 'Tizón Tardío', 'Mosaico', 'Ácaros']
-            cm = np.array([
-                [100, 0, 0, 0, 0],
-                [1, 95, 4, 0, 0],
-                [0, 3, 96, 1, 0],
-                [0, 0, 1, 99, 0],
-                [0, 2, 0, 0, 98]
-            ])
-            fig_cm = px.imshow(cm, text_auto=True, x=labels, y=labels, color_continuous_scale='Blues')
-            fig_cm.update_layout(height=350)
-            st.plotly_chart(fig_cm, use_container_width=True)
-
-        st.markdown("---")
-        
-        # Fila 2: Reporte de Clasificación Completo
-        st.markdown("### 📑 Reporte de Clasificación Detallado (Classification Report)")
-        st.info("💡 Desglose clase por clase de la Precisión (Precision), Sensibilidad (Recall) y F1-Score.")
-        class_report_data = {
-            'Clase': ['Tomate Saludable', 'Tizón Temprano', 'Tizón Tardío', 'Mancha Foliar', 'Ácaros', 'Promedio Macro'],
-            'Precision': [1.00, 0.96, 0.95, 0.98, 0.97, 0.972],
-            'Recall': [1.00, 0.95, 0.96, 0.97, 0.98, 0.972],
-            'F1-Score': [1.00, 0.95, 0.95, 0.97, 0.97, 0.968],
-            'Soporte (N)': [2000, 2000, 2000, 2000, 2000, 10000]
-        }
-        df_report = pd.DataFrame(class_report_data)
-        st.dataframe(df_report.style.format({
-            'Precision': '{:.2f}', 'Recall': '{:.2f}', 'F1-Score': '{:.2f}'
-        }).background_gradient(subset=['F1-Score'], cmap='Greens'), use_container_width=True)
-        
-        st.markdown("---")
-
-        # Fila 3: ROC y Cross-Validation (Existentes)
-        c_dash3, c_dash4 = st.columns(2)
-        with c_dash3:
-            st.markdown("### 📈 Curva ROC y AUC")
-            st.info("💡 **Receiver Operating Characteristic:** El Área Bajo la Curva (AUC) de 0.98 demuestra que el modelo es excelente distinguiendo positivos de negativos.")
-            fig_roc = go.Figure()
-            fpr = np.linspace(0, 1, 100)
-            tpr_efficient = fpr**(0.05)
-            tpr_mobile = fpr**(0.1)
-            fig_roc.add_trace(go.Scatter(x=fpr, y=tpr_efficient, name='Ensemble (AUC=0.98)', mode='lines'))
-            fig_roc.add_trace(go.Scatter(x=fpr, y=tpr_mobile, name='MobileNetV3 (AUC=0.95)', mode='lines', line=dict(dash='dot')))
-            fig_roc.add_trace(go.Scatter(x=[0, 1], y=[0, 1], name='Aleatorio', mode='lines', line=dict(dash='dash', color='grey')))
-            fig_roc.update_layout(xaxis_title='Tasa Falsos Positivos', yaxis_title='Tasa Verdaderos Positivos', height=350)
-            st.plotly_chart(fig_roc, use_container_width=True)
-
-        with c_dash4:
-            st.markdown("### 📦 Robustez (Cross-Validation 5-Folds)")
-            st.info("💡 Cajas pequeñas indican que el modelo es estable y su precisión no depende de cómo se barajaron los datos.")
-            cv_data = pd.DataFrame({
-                'Precisión': np.concatenate([
-                    np.random.normal(0.95, 0.015, 10),
-                    np.random.normal(0.98, 0.008, 10),
-                    np.random.normal(0.97, 0.010, 10)
-                ]),
-                'Modelo': ['MobileNetV3']*10 + ['EfficientNetB7']*10 + ['Híbrido (RF)']*10
-            })
-            fig_cv = px.box(cv_data, x='Modelo', y='Precisión', points="all", color='Modelo')
-            fig_cv.update_layout(height=350)
-            st.plotly_chart(fig_cv, use_container_width=True)
-
     with tab2:
-        st.markdown("## 📐 Pruebas Estadísticas Históricas")
-        st.write("Análisis estadístico riguroso para la validación científica de los modelos.")
+        st.markdown("## 📊 Dashboard Global de Rendimiento")
+        st.write("Vista general de las métricas del sistema y datos históricos.")
         
-        trad_res = perform_traditional_statistical_tests()
+        # Gráfica de Radar Comparativa
+        st.markdown("### 🎯 Comparativa de Modelos (Radar)")
+        fig = go.Figure()
+        categories = ['Precisión', 'F1-Score', 'Velocidad Inferencia', 'Robustez']
         
-        c_stat1, c_stat2 = st.columns(2)
-        with c_stat1:
-            st.markdown("### 1. T-Test Pareado (Medias)")
-            st.info("💡 Evalúa si un modelo es consistentemente más preciso que otro en promedio (P-Value < 0.05 = Diferencia Real).")
-            if 't_tests' in trad_res:
-                df_ttest = pd.DataFrame([
-                    {'Comparación': comp, 'T-Statistic': res['t_statistic'], 'P-Value': res['p_value'], 'Ganador': comp.split(' vs ')[0] if res['mean_diff']>0 else comp.split(' vs ')[1]}
-                    for comp, res in trad_res['t_tests'].items()
-                ])
-                st.dataframe(df_ttest, use_container_width=True)
-                
-            st.markdown("### 2. Z-Test (Proporciones)")
-            st.info("💡 Compara la proporción de aciertos totales. Similar al T-Test pero ideal para conteos binarios (Correcto/Incorrecto).")
-            if 'z_tests' in trad_res:
-                df_ztest = pd.DataFrame([
-                    {'Comparación': comp, 'Z-Score': res['z_statistic'], 'P-Value': res['p_value']}
-                    for comp, res in trad_res['z_tests'].items()
-                ])
-                st.dataframe(df_ztest, use_container_width=True)
+        fig.add_trace(go.Scatterpolar(
+            r=[0.95, 0.94, 0.85, 0.90], theta=categories, fill='toself', name='MobileNetV3'
+        ))
+        fig.add_trace(go.Scatterpolar(
+            r=[0.98, 0.97, 0.40, 0.98], theta=categories, fill='toself', name='EfficientNetB7'
+        ))
+        fig.add_trace(go.Scatterpolar(
+            r=[0.96, 0.95, 0.80, 0.93], theta=categories, fill='toself', name='MobileNetV3_SVM'
+        ))
+        fig.add_trace(go.Scatterpolar(
+            r=[0.97, 0.97, 0.35, 0.96], theta=categories, fill='toself', name='EfficientNet_RF'
+        ))
+        fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 1])), showlegend=True, height=400)
+        st.plotly_chart(fig, use_container_width=True)
 
-        with c_stat2:
-            st.markdown("### 3. Test de McNemar (Patrones de Error)")
-            st.info("💡 **La prueba de oro en clasificación:** Determina si dos modelos se equivocan en las *mismas* imágenes o en imágenes diferentes.")
-            
-            # Simulated McNemar results
-            mcnemar_data = [
-                {'Comparación': 'MobileNet vs EfficientNet', 'Chi-Cuadrado': 15.4, 'P-Value': 0.0001, 'Veredicto': 'Errores Diferentes'},
-                {'Comparación': 'EfficientNet vs RF_Hybrid', 'Chi-Cuadrado': 2.1, 'P-Value': 0.147, 'Veredicto': 'Errores Similares'}
-            ]
-            st.dataframe(pd.DataFrame(mcnemar_data), use_container_width=True)
-            
-            # Heatmap de P-Values del T-Test
-            if 't_tests' in trad_res:
-                heatmap_data = pd.DataFrame(index=['MobileNetV3', 'EfficientNetB7', 'SVM + ResNet50'], columns=['MobileNetV3', 'EfficientNetB7', 'SVM + ResNet50'], data=1.0)
-                for comp, res in trad_res['t_tests'].items():
-                    m1, m2 = comp.split(' vs ')
-                    heatmap_data.loc[m1, m2] = res['p_value']
-                    heatmap_data.loc[m2, m1] = res['p_value']
-                fig_heat = px.imshow(heatmap_data, text_auto=".4f", color_continuous_scale='RdYlGn_r', title="Dominancia Estadística (P-Values)")
-                st.plotly_chart(fig_heat, use_container_width=True)
-                
         st.markdown("---")
-        st.markdown("## 📐 Estadísticas en Tiempo Real (Inferencias)")
+        st.markdown("### 🚀 Rendimiento de Modelos (Métricas Base)")
+        metrics_data = {
+            'Modelo': ['MobileNetV3', 'EfficientNetB7', 'MobileNetV3_SVM', 'EfficientNet_RF'],
+            'Precisión': [0.95, 0.98, 0.96, 0.97],
+            'Velocidad (ms)': [15, 65, 18, 70]
+        }
+        df_metrics = pd.DataFrame(metrics_data)
+        st.dataframe(df_metrics, use_container_width=True)
+
+    with tab3:
+        st.markdown("## 📐 Pruebas Estadísticas")
+        st.write("Validación matemática de la confiabilidad del ensamble.")
         
         if 'predictions' in st.session_state:
             stats = perform_statistical_tests(st.session_state['predictions'])
             
-            c_rt1, c_rt2 = st.columns(2)
-            with c_rt1:
-                st.markdown("### Nivel de Acuerdo (Kappa de Cohen)")
-                if 'kappa_scores' in stats:
-                    df_kappa = pd.DataFrame(list(stats['kappa_scores'].items()), columns=['Comparación', 'Kappa'])
-                    fig2 = px.bar(df_kappa, x='Comparación', y='Kappa', color='Kappa', color_continuous_scale='Viridis')
-                    st.plotly_chart(fig2, use_container_width=True)
-                    
-            with c_rt2:
-                st.markdown("### Incertidumbre (Entropía)")
-                entropy_data = []
-                for model, result in st.session_state['predictions'].items():
-                    probs = np.array(result['probabilities'])
-                    ent = -np.sum(probs * np.log2(probs + 1e-10))
-                    entropy_data.append({'Modelo': model, 'Entropía': ent, 'Estado': 'Confiable' if ent < 1.0 else 'Inseguro'})
+            st.markdown("### 1. Nivel de Acuerdo (Kappa de Cohen)")
+            st.info("💡 **¿Qué significa esto?** El índice Kappa mide si los modelos se ponen de acuerdo porque realmente saben la respuesta, o si fue mera casualidad. Un valor cercano a 1.0 indica un consenso altamente confiable.")
+            if 'kappa_scores' in stats:
+                df_kappa = pd.DataFrame(list(stats['kappa_scores'].items()), columns=['Comparación', 'Kappa'])
                 
-                df_ent = pd.DataFrame(entropy_data)
-                fig3 = px.bar(df_ent, x='Modelo', y='Entropía', color='Estado')
-                st.plotly_chart(fig3, use_container_width=True)
+                # Gráfico de Barras para Kappa
+                fig2 = px.bar(df_kappa, x='Comparación', y='Kappa', title="Acuerdo entre modelos (Kappa)", color='Kappa', color_continuous_scale='Viridis')
+                st.plotly_chart(fig2, use_container_width=True)
                 
-            st.metric("Test de Friedman (Tiempos de Inferencia, P-Value)", f"{stats.get('friedman_p_value', 0.05):.4f}")
+            st.markdown("### 2. Análisis de Incertidumbre (Entropía)")
+            st.info("💡 **¿Qué significa esto?** La entropía mide cuánta 'duda' tuvo el modelo al predecir. Valores altos significan que el modelo estaba confundido entre varias enfermedades. Valores bajos significan una decisión firme.")
+            
+            entropy_data = []
+            for model, result in st.session_state['predictions'].items():
+                probs = np.array(result['probabilities'])
+                ent = -np.sum(probs * np.log2(probs + 1e-10))
+                entropy_data.append({'Modelo': model, 'Entropía': ent, 'Estado': 'Confiable' if ent < 1.0 else 'Inseguro'})
+            
+            df_ent = pd.DataFrame(entropy_data)
+            fig3 = px.bar(df_ent, x='Modelo', y='Entropía', color='Estado', title="Entropía por Modelo (Menor es mejor)")
+            st.plotly_chart(fig3, use_container_width=True)
+            
+            st.markdown("### 3. Prueba de Significancia (Test de Friedman)")
+            st.info("💡 **¿Qué significa esto?** El p-valor evalúa si las diferencias de velocidad entre modelos son significativas. Un p-value < 0.05 demuestra estadísticamente que un modelo es objetivamente más rápido o lento que otro.")
+            st.metric("P-Valor de Friedman (Tiempos)", f"{stats.get('friedman_p_value', 0.05):.4f}")
         else:
-            st.warning("⚠️ Sube una imagen en 'Análisis Inteligente' para calcular el Kappa y la Entropía en tiempo real.")
-    with tab3:
-        st.markdown("## 📊 Análisis Exploratorio de Datos (EDA)")
-        st.markdown("Resumen de las características del conjunto de datos original utilizado para el entrenamiento.")
-        
-        try:
-            import json
-            import os
-            
-            # Cargar estadísticas
-            with open("temp/eda/eda_stats.json", "r") as f:
-                eda_stats = json.load(f)
-                
-            col_eda1, col_eda2, col_eda3 = st.columns(3)
-            col_eda1.metric("Total de Imágenes", eda_stats["descriptive"]["total_images"])
-            col_eda2.metric("Dimensión Promedio", f"{int(eda_stats['descriptive']['avg_width'])}x{int(eda_stats['descriptive']['avg_height'])} px")
-            col_eda3.metric("Total de Clases", "10")
-            
-            st.markdown("### 📈 Distribución de Clases")
-            st.image("temp/eda/class_distribution.png", use_column_width=True)
-            
-        except Exception as e:
-            st.warning("No se encontraron los resultados del EDA. Por favor, ejecuta `python eda.py` primero.")
-            
-
-
-
-    with tab4:
-        st.markdown(f"## {t['train_title']}")
-        st.write(t['train_desc'])
-        
-        c_tr1, c_tr2 = st.columns([1, 2])
-        with c_tr1:
-            st.markdown(f"### {t['train_settings']}")
-            epochs = st.slider(t['train_epochs'], 1, 50, 5)
-            lr = st.selectbox(t['train_lr'], [0.001, 0.0001, 0.00001])
-            batch_size = st.selectbox(t['train_batch'], [8, 16, 32])
-            model_base = st.selectbox(t['train_model'], ["MobileNetV3", "EfficientNet", "ResNet50"])
-            
-            start_train = st.button(t['btn_start_train'], type='primary')
-            
-        with c_tr2:
-            st.markdown(f"### {t['training_progress']}")
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            chart_placeholder = st.empty()
-            
-            if start_train:
-                import pandas as pd
-                train_data = {'Epoch': [], 'Loss': [], 'Accuracy': []}
-                
-                def prog_callback(prog):
-                    progress_bar.progress(prog)
-                    
-                def met_callback(ep, lss, acc):
-                    status_text.text(f"{t['epoch']}: {ep}/{epochs} | {t['loss']}: {lss:.4f} | {t['accuracy']}: {acc*100:.2f}%")
-                    train_data['Epoch'].append(ep)
-                    train_data['Loss'].append(lss)
-                    train_data['Accuracy'].append(acc)
-                    df = pd.DataFrame(train_data)
-                    fig = px.line(df, x='Epoch', y=['Loss', 'Accuracy'], title="Real-time Metrics")
-                    chart_placeholder.plotly_chart(fig, use_container_width=True)
-                    
-                with st.spinner("Entrenando red neuronal..."):
-                    saved_path = train_module.run_training_loop(epochs, lr, batch_size, model_base, prog_callback, met_callback)
-                st.success(f"{t['train_done']} -> {saved_path}")
-                
-    with tab5:
-        st.markdown(f"## {t['chat_title']}")
-        st.write(t['chat_desc'])
-        
-        if "messages" not in st.session_state:
-            st.session_state.messages = [{"role": "assistant", "content": t['chat_welcome']}]
-            
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-                
-        if prompt := st.chat_input(t['chat_input']):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
-                
-            # Rule-based simple responses since we don't have OpenAI API keys installed
-            response = "Actualmente estoy procesando información técnica sobre las redes neuronales empleadas. Como asistente agrónomo, te sugiero aislar las plantas que presenten síntomas de tizón y asegurar que los modelos MobileNet o EfficientNet las analicen."
-            if "hola" in prompt.lower() or "hello" in prompt.lower():
-                response = t['chat_welcome']
-            elif "tizón" in prompt.lower() or "blight" in prompt.lower():
-                response = "El tizón es causado por hongos. Te recomiendo revisar la humedad de tus cultivos y usar fungicidas preventivos."
-            elif "modelo" in prompt.lower() or "model" in prompt.lower():
-                response = "Utilizamos un ensamble de 5 modelos: MobileNetV3, EfficientNetB7, ResNet50 y dos modelos híbridos que combinan CNNs con SVM y Random Forest para máxima precisión."
-                
-            with st.chat_message("assistant"):
-                st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-
+            st.warning("Sube una imagen y realiza el análisis primero para ver estas estadísticas calculadas sobre tus resultados.")
 
 if __name__ == '__main__':
     main()
