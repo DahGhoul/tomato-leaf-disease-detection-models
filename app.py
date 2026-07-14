@@ -181,6 +181,8 @@ TREATMENT_INFO = {
 }
 
 def call_predict_api(image):
+    if getattr(image, 'mode', '') in ('RGBA', 'P') or getattr(image, 'mode', '') != 'RGB':
+        image = image.convert('RGB')
     buffered = io.BytesIO()
     image.save(buffered, format="JPEG")
     files = {"file": ("image.jpg", buffered.getvalue(), "image/jpeg")}
@@ -985,6 +987,29 @@ def main():
         "📐 Pruebas Estadísticas"
     ])
     
+    with tab0:
+        st.markdown("## 📊 Análisis Exploratorio de Datos (EDA)")
+        st.markdown("Resumen de las características del conjunto de datos original utilizado para el entrenamiento.")
+        
+        try:
+            import json
+            import os
+            
+            # Cargar estadísticas
+            with open("temp/eda/eda_stats.json", "r") as f:
+                eda_stats = json.load(f)
+                
+            col_eda1, col_eda2, col_eda3 = st.columns(3)
+            col_eda1.metric("Total de Imágenes", eda_stats["total_images"])
+            col_eda2.metric("Dimensión Promedio", f"{int(eda_stats['mean_width'])}x{int(eda_stats['mean_height'])} px")
+            col_eda3.metric("Total de Clases", "10")
+            
+            st.markdown("### 📈 Distribución de Clases")
+            st.image("temp/eda/class_distribution.png", use_column_width=True)
+            
+        except Exception as e:
+            st.warning("No se encontraron los resultados del EDA. Por favor, ejecuta `python eda.py` primero.")
+            
     with tab1:
         st.markdown("## 🔬 Análisis Inteligente")
         st.write("Sube la imagen de una hoja de tomate para obtener un diagnóstico basado en el consenso de todos nuestros modelos.")
