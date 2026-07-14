@@ -1110,12 +1110,21 @@ def main():
     
     # Sidebar
     with st.sidebar:
-        st.title("⚙️ Configuración")
-        st.markdown("### ⚙️ Modo de Análisis")
+        selected_lang = st.selectbox("🌐 Idioma / Language", ["Español", "English"], index=0 if st.session_state['lang'] == 'es' else 1)
+        
+        # When language changes, we must rerun to apply the new translations
+        if (selected_lang == "Español" and st.session_state['lang'] == 'en') or (selected_lang == "English" and st.session_state['lang'] == 'es'):
+            st.session_state['lang'] = 'es' if selected_lang == "Español" else 'en'
+            st.rerun()
+            
+        t = lang.TRANSLATIONS[st.session_state['lang']]
+        
+        st.title(t['sidebar_title'])
+        st.markdown(f"### {t['mode_select']}")
         fast_mode = st.radio(
             "Selecciona la exhaustividad:",
-            ("🚀 Rápido (MobileNet)", "🧠 Completo (5 Modelos)")
-        ) == "🚀 Rápido (MobileNet)"
+            (f"🚀 {t['mode_fast']}", f"🧠 {t['mode_full']}")
+        ) == f"🚀 {t['mode_fast']}"
         st.markdown("---")
         st.markdown("### 📊 Modelos Cargados")
         model_info = {
