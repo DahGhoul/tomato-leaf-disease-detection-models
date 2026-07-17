@@ -1250,12 +1250,14 @@ def main():
                         
                 st.markdown(f"### 📊 Validación Estadística (Foto Actual)")
                 st.info("Esta sección mide matemáticamente el nivel de acuerdo entre los modelos para asegurar que el diagnóstico de ESTA hoja en particular es confiable.")
-                stats = perform_statistical_tests(preds)
                 
-                st.write(f"**Confianza Media Global:** {stats['mean_confidence']:.2f}%")
-                st.write(f"**Varianza (Inestabilidad):** {stats['variance']:.4f}")
+                mean_conf = np.mean([r['confidence'] for r in preds.values()]) * 100
+                var_conf = np.var([r['confidence'] for r in preds.values()]) * 10000
                 
-                if stats['variance'] > 100:
+                st.write(f"**Confianza Media Global:** {mean_conf:.2f}%")
+                st.write(f"**Varianza (Inestabilidad):** {var_conf:.4f}")
+                
+                if var_conf > 100:
                     st.warning("⚠️ Alta varianza detectada: Los modelos discrepan significativamente. El diagnóstico final tiene alto margen de error.")
                 else:
                     st.success("✅ Baja varianza: Hay consenso total entre los modelos. El diagnóstico es estadísticamente altamente confiable.")
