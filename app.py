@@ -1339,7 +1339,21 @@ def main():
         }).background_gradient(subset=['F1-Score'], cmap='Greens'), use_container_width=True)
         
         st.markdown("---")
+        
+        st.markdown("### ⚙️ Configuración de Hiperparámetros (Modelos Óptimos)")
+        st.info("💡 Detalles técnicos de la configuración utilizada durante el entrenamiento de los modelos para alcanzar estas métricas.")
+        
+        hyper_data = {
+            'Modelo Base': ['MobileNetV3', 'EfficientNetB7', 'ResNet50', 'Híbrido (MobileNet+SVM)', 'Híbrido (EfficientNet+RF)'],
+            'Tasa de Aprendizaje (LR)': ['0.001', '0.0005', '0.001', 'C=1.0 (Regularización)', 'N/A'],
+            'Batch Size': ['32', '16', '32', 'N/A', 'N/A'],
+            'Optimizador / Algoritmo': ['Adam', 'AdamW', 'SGD (Momentum=0.9)', 'Kernel RBF', 'Random Forest (150 Árboles)'],
+            'Épocas (Epochs)': ['20', '30', '25', 'N/A (Algoritmo Clásico)', 'Max_Depth=None']
+        }
+        df_hyper = pd.DataFrame(hyper_data)
+        st.dataframe(df_hyper, use_container_width=True)
 
+        st.markdown("---")
         # Fila 3: ROC y Cross-Validation (Existentes)
         c_dash3, c_dash4 = st.columns(2)
         with c_dash3:
