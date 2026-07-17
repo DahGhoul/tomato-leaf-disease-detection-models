@@ -1141,8 +1141,9 @@ def main():
                 
         st.markdown("---")
         st.info("💡 Sube una imagen en la pestaña de 'Análisis Inteligente' para probar el ensamble de modelos.")
-
-
+        st.markdown("---")
+        user_mode = st.toggle("👨‍🌾 Modo Agricultor (Ocultar Panel Científico)", value=False)
+        st.markdown("---")
 
     # TABS REORGANIZADOS: Para una mejor UX académica
     if user_mode:
@@ -1156,6 +1157,8 @@ def main():
             t['tab_train'],
             t['tab_chat']
         ])
+    
+    with tab0:
         st.markdown(f"## {t['tab_inference']}")
         st.write(t['inference_desc'])
         
