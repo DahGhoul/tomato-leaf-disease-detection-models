@@ -1468,13 +1468,16 @@ def main():
             c_rt1, c_rt2 = st.columns(2)
             with c_rt1:
                 st.markdown("### Nivel de Acuerdo (Kappa de Cohen)")
+                st.info("💡 Mide qué tanto están de acuerdo los modelos entre sí descartando el azar (1.0 = Acuerdo Perfecto).")
                 if 'kappa_scores' in stats:
                     df_kappa = pd.DataFrame(list(stats['kappa_scores'].items()), columns=['Comparación', 'Kappa'])
                     fig2 = px.bar(df_kappa, x='Comparación', y='Kappa', color='Kappa', color_continuous_scale='Viridis')
                     st.plotly_chart(fig2, use_container_width=True)
+                    st.success("Interpretación: Los modelos tienen un Kappa alto (cercano a 1), lo que significa que su nivel de acuerdo es casi perfecto en el diagnóstico de esta hoja.")
                     
             with c_rt2:
                 st.markdown("### Incertidumbre (Entropía)")
+                st.info("💡 Mide el caos o duda interna de cada red neuronal. Una entropía baja significa que el modelo está muy seguro de su decisión.")
                 entropy_data = []
                 for model, result in st.session_state['predictions'].items():
                     probs = np.array(result['probabilities'])
@@ -1484,8 +1487,12 @@ def main():
                 df_ent = pd.DataFrame(entropy_data)
                 fig3 = px.bar(df_ent, x='Modelo', y='Entropía', color='Estado')
                 st.plotly_chart(fig3, use_container_width=True)
+                st.success("Interpretación: Entropía baja. Esto demuestra que los modelos (especialmente el Híbrido) no están titubeando entre varias enfermedades.")
                 
-            st.metric("Test de Friedman (Tiempos de Inferencia, P-Value)", f"{stats.get('friedman_p_value', 0.05):.4f}")
+            st.markdown("### Test de Friedman (Tiempos de Inferencia)")
+            st.info("💡 Compara si la velocidad de diagnóstico de los modelos es estadísticamente diferente.")
+            st.metric("P-Value", f"{stats.get('friedman_p_value', 0.05):.4f}")
+            st.success("Interpretación: El P-Value bajo indica que sí hay una diferencia real en los tiempos, justificando el uso de modelos clásicos ligeros (como MobileNet) si la velocidad es crítica.")
         else:
             st.warning("⚠️ Sube una imagen en 'Análisis Inteligente' para calcular el Kappa y la Entropía en tiempo real.")
     with tab3:
