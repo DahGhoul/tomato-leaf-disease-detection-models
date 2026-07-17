@@ -1145,15 +1145,17 @@ def main():
 
 
     # TABS REORGANIZADOS: Para una mejor UX académica
-    tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        t['tab_inference'], 
-        t['tab_dashboard'], 
-        t['tab_stats'],
-        t['tab_eda'],
-        t['tab_train'],
-        t['tab_chat']
-    ])
-    with tab0:
+    if user_mode:
+        tab0, tab5 = st.tabs([t['tab_inference'], t['tab_chat']])
+    else:
+        tab0, tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            t['tab_inference'], 
+            t['tab_dashboard'], 
+            t['tab_stats'],
+            t['tab_eda'],
+            t['tab_train'],
+            t['tab_chat']
+        ])
         st.markdown(f"## {t['tab_inference']}")
         st.write(t['inference_desc'])
         
@@ -1285,294 +1287,295 @@ def main():
                     
 
 
-    with tab1:
-        st.markdown("## 📊 Dashboard Global de Rendimiento")
-        st.write("Vista exhaustiva de las métricas de rendimiento, validación y capacidad discriminativa del sistema.")
+    if not user_mode:
+        with tab1:
+            st.markdown("## 📊 Dashboard Global de Rendimiento")
+            st.write("Vista exhaustiva de las métricas de rendimiento, validación y capacidad discriminativa del sistema.")
         
-        # Fila 1: Métricas de Entrenamiento y Matriz de Confusión
-        c_d1, c_d2 = st.columns(2)
-        with c_d1:
-            st.markdown("### 📈 Historial de Entrenamiento (Accuracy vs Loss)")
-            st.info("💡 **Curvas de Aprendizaje:** Demuestra que el modelo convergió correctamente sin sufrir de *Overfitting* (sobreajuste).")
-            # Simulated training history
-            epochs = np.arange(1, 21)
-            train_acc = 1 - np.exp(-0.3 * epochs) + np.random.normal(0, 0.01, 20)
-            val_acc = 1 - np.exp(-0.25 * epochs) + np.random.normal(0, 0.01, 20)
+            # Fila 1: Métricas de Entrenamiento y Matriz de Confusión
+            c_d1, c_d2 = st.columns(2)
+            with c_d1:
+                st.markdown("### 📈 Historial de Entrenamiento (Accuracy vs Loss)")
+                st.info("💡 **Curvas de Aprendizaje:** Demuestra que el modelo convergió correctamente sin sufrir de *Overfitting* (sobreajuste).")
+                # Simulated training history
+                epochs = np.arange(1, 21)
+                train_acc = 1 - np.exp(-0.3 * epochs) + np.random.normal(0, 0.01, 20)
+                val_acc = 1 - np.exp(-0.25 * epochs) + np.random.normal(0, 0.01, 20)
             
-            fig_hist = go.Figure()
-            fig_hist.add_trace(go.Scatter(x=epochs, y=train_acc, mode='lines+markers', name='Train Accuracy'))
-            fig_hist.add_trace(go.Scatter(x=epochs, y=val_acc, mode='lines', name='Validation Accuracy', line=dict(dash='dash')))
-            fig_hist.update_layout(xaxis_title='Épocas', yaxis_title='Precisión', height=350)
-            st.plotly_chart(fig_hist, use_container_width=True)
+                fig_hist = go.Figure()
+                fig_hist.add_trace(go.Scatter(x=epochs, y=train_acc, mode='lines+markers', name='Train Accuracy'))
+                fig_hist.add_trace(go.Scatter(x=epochs, y=val_acc, mode='lines', name='Validation Accuracy', line=dict(dash='dash')))
+                fig_hist.update_layout(xaxis_title='Épocas', yaxis_title='Precisión', height=350)
+                st.plotly_chart(fig_hist, use_container_width=True)
             
-        with c_d2:
-            st.markdown("### 🎯 Matriz de Confusión (Ensemble)")
-            st.info("💡 **Matriz de Confusión:** Revela si el modelo se confunde entre enfermedades visualmente similares (ej. Tizón vs Mancha Foliar).")
-            # Simulated Confusion Matrix
-            labels = ['Saludable', 'Tizón Temprano', 'Tizón Tardío', 'Mosaico', 'Ácaros']
-            cm = np.array([
-                [100, 0, 0, 0, 0],
-                [1, 95, 4, 0, 0],
-                [0, 3, 96, 1, 0],
-                [0, 0, 1, 99, 0],
-                [0, 2, 0, 0, 98]
-            ])
-            fig_cm = px.imshow(cm, text_auto=True, x=labels, y=labels, color_continuous_scale='Blues')
-            fig_cm.update_layout(height=350)
-            st.plotly_chart(fig_cm, use_container_width=True)
+            with c_d2:
+                st.markdown("### 🎯 Matriz de Confusión (Ensemble)")
+                st.info("💡 **Matriz de Confusión:** Revela si el modelo se confunde entre enfermedades visualmente similares (ej. Tizón vs Mancha Foliar).")
+                # Simulated Confusion Matrix
+                labels = ['Saludable', 'Tizón Temprano', 'Tizón Tardío', 'Mosaico', 'Ácaros']
+                cm = np.array([
+                    [100, 0, 0, 0, 0],
+                    [1, 95, 4, 0, 0],
+                    [0, 3, 96, 1, 0],
+                    [0, 0, 1, 99, 0],
+                    [0, 2, 0, 0, 98]
+                ])
+                fig_cm = px.imshow(cm, text_auto=True, x=labels, y=labels, color_continuous_scale='Blues')
+                fig_cm.update_layout(height=350)
+                st.plotly_chart(fig_cm, use_container_width=True)
 
-        st.markdown("---")
+            st.markdown("---")
         
-        # Fila 2: Reporte de Clasificación Completo
-        st.markdown("### 📑 Reporte de Clasificación Detallado (Classification Report)")
-        st.info("💡 Desglose clase por clase de la Precisión (Precision), Sensibilidad (Recall) y F1-Score.")
-        class_report_data = {
-            'Clase': ['Tomate Saludable', 'Tizón Temprano', 'Tizón Tardío', 'Mancha Foliar', 'Ácaros', 'Promedio Macro'],
-            'Precision': [1.00, 0.96, 0.95, 0.98, 0.97, 0.972],
-            'Recall': [1.00, 0.95, 0.96, 0.97, 0.98, 0.972],
-            'F1-Score': [1.00, 0.95, 0.95, 0.97, 0.97, 0.968],
-            'Soporte (N)': [2000, 2000, 2000, 2000, 2000, 10000]
-        }
-        df_report = pd.DataFrame(class_report_data)
-        st.dataframe(df_report.style.format({
-            'Precision': '{:.2f}', 'Recall': '{:.2f}', 'F1-Score': '{:.2f}'
-        }).background_gradient(subset=['F1-Score'], cmap='Greens'), use_container_width=True)
+            # Fila 2: Reporte de Clasificación Completo
+            st.markdown("### 📑 Reporte de Clasificación Detallado (Classification Report)")
+            st.info("💡 Desglose clase por clase de la Precisión (Precision), Sensibilidad (Recall) y F1-Score.")
+            class_report_data = {
+                'Clase': ['Tomate Saludable', 'Tizón Temprano', 'Tizón Tardío', 'Mancha Foliar', 'Ácaros', 'Promedio Macro'],
+                'Precision': [1.00, 0.96, 0.95, 0.98, 0.97, 0.972],
+                'Recall': [1.00, 0.95, 0.96, 0.97, 0.98, 0.972],
+                'F1-Score': [1.00, 0.95, 0.95, 0.97, 0.97, 0.968],
+                'Soporte (N)': [2000, 2000, 2000, 2000, 2000, 10000]
+            }
+            df_report = pd.DataFrame(class_report_data)
+            st.dataframe(df_report.style.format({
+                'Precision': '{:.2f}', 'Recall': '{:.2f}', 'F1-Score': '{:.2f}'
+            }).background_gradient(subset=['F1-Score'], cmap='Greens'), use_container_width=True)
         
-        st.markdown("---")
+            st.markdown("---")
         
-        st.markdown("### ⚙️ Configuración de Hiperparámetros (Modelos Óptimos)")
-        st.info("💡 Detalles técnicos de la configuración utilizada durante el entrenamiento de los modelos para alcanzar estas métricas.")
+            st.markdown("### ⚙️ Configuración de Hiperparámetros (Modelos Óptimos)")
+            st.info("💡 Detalles técnicos de la configuración utilizada durante el entrenamiento de los modelos para alcanzar estas métricas.")
         
-        hyper_data = {
-            'Modelo Base': ['MobileNetV3', 'EfficientNetB7', 'ResNet50', 'Híbrido (MobileNet+SVM)', 'Híbrido (EfficientNet+RF)'],
-            'Tasa de Aprendizaje (LR)': ['0.001', '0.0005', '0.001', 'C=1.0 (Regularización)', 'N/A'],
-            'Batch Size': ['32', '16', '32', 'N/A', 'N/A'],
-            'Optimizador / Algoritmo': ['Adam', 'AdamW', 'SGD (Momentum=0.9)', 'Kernel RBF', 'Random Forest (150 Árboles)'],
-            'Épocas (Epochs)': ['20', '30', '25', 'N/A (Algoritmo Clásico)', 'Max_Depth=None']
-        }
-        df_hyper = pd.DataFrame(hyper_data)
-        st.dataframe(df_hyper, use_container_width=True)
+            hyper_data = {
+                'Modelo Base': ['MobileNetV3', 'EfficientNetB7', 'ResNet50', 'Híbrido (MobileNet+SVM)', 'Híbrido (EfficientNet+RF)'],
+                'Tasa de Aprendizaje (LR)': ['0.001', '0.0005', '0.001', 'C=1.0 (Regularización)', 'N/A'],
+                'Batch Size': ['32', '16', '32', 'N/A', 'N/A'],
+                'Optimizador / Algoritmo': ['Adam', 'AdamW', 'SGD (Momentum=0.9)', 'Kernel RBF', 'Random Forest (150 Árboles)'],
+                'Épocas (Epochs)': ['20', '30', '25', 'N/A (Algoritmo Clásico)', 'Max_Depth=None']
+            }
+            df_hyper = pd.DataFrame(hyper_data)
+            st.dataframe(df_hyper, use_container_width=True)
 
-        st.markdown("---")
-        # Fila 3: ROC y Cross-Validation (Existentes)
-        c_dash3, c_dash4 = st.columns(2)
-        with c_dash3:
-            st.markdown("### 📈 Curva ROC y AUC")
-            st.info("💡 **Receiver Operating Characteristic:** El Área Bajo la Curva (AUC) de 0.98 demuestra que el modelo es excelente distinguiendo positivos de negativos.")
-            fig_roc = go.Figure()
-            fpr = np.linspace(0, 1, 100)
-            tpr_efficient = fpr**(0.05)
-            tpr_mobile = fpr**(0.1)
-            fig_roc.add_trace(go.Scatter(x=fpr, y=tpr_efficient, name='Ensemble (AUC=0.98)', mode='lines'))
-            fig_roc.add_trace(go.Scatter(x=fpr, y=tpr_mobile, name='MobileNetV3 (AUC=0.95)', mode='lines', line=dict(dash='dot')))
-            fig_roc.add_trace(go.Scatter(x=[0, 1], y=[0, 1], name='Aleatorio', mode='lines', line=dict(dash='dash', color='grey')))
-            fig_roc.update_layout(xaxis_title='Tasa Falsos Positivos', yaxis_title='Tasa Verdaderos Positivos', height=350)
-            st.plotly_chart(fig_roc, use_container_width=True)
+            st.markdown("---")
+            # Fila 3: ROC y Cross-Validation (Existentes)
+            c_dash3, c_dash4 = st.columns(2)
+            with c_dash3:
+                st.markdown("### 📈 Curva ROC y AUC")
+                st.info("💡 **Receiver Operating Characteristic:** El Área Bajo la Curva (AUC) de 0.98 demuestra que el modelo es excelente distinguiendo positivos de negativos.")
+                fig_roc = go.Figure()
+                fpr = np.linspace(0, 1, 100)
+                tpr_efficient = fpr**(0.05)
+                tpr_mobile = fpr**(0.1)
+                fig_roc.add_trace(go.Scatter(x=fpr, y=tpr_efficient, name='Ensemble (AUC=0.98)', mode='lines'))
+                fig_roc.add_trace(go.Scatter(x=fpr, y=tpr_mobile, name='MobileNetV3 (AUC=0.95)', mode='lines', line=dict(dash='dot')))
+                fig_roc.add_trace(go.Scatter(x=[0, 1], y=[0, 1], name='Aleatorio', mode='lines', line=dict(dash='dash', color='grey')))
+                fig_roc.update_layout(xaxis_title='Tasa Falsos Positivos', yaxis_title='Tasa Verdaderos Positivos', height=350)
+                st.plotly_chart(fig_roc, use_container_width=True)
 
-        with c_dash4:
-            st.markdown("### 📦 Robustez (Cross-Validation 5-Folds)")
-            st.info("💡 Cajas pequeñas indican que el modelo es estable y su precisión no depende de cómo se barajaron los datos.")
-            cv_data = pd.DataFrame({
-                'Precisión': np.concatenate([
-                    np.random.normal(0.95, 0.015, 10),
-                    np.random.normal(0.98, 0.008, 10),
-                    np.random.normal(0.97, 0.010, 10)
-                ]),
-                'Modelo': ['MobileNetV3']*10 + ['EfficientNetB7']*10 + ['Híbrido (RF)']*10
-            })
-            fig_cv = px.box(cv_data, x='Modelo', y='Precisión', points="all", color='Modelo')
-            fig_cv.update_layout(height=350)
-            st.plotly_chart(fig_cv, use_container_width=True)
+            with c_dash4:
+                st.markdown("### 📦 Robustez (Cross-Validation 5-Folds)")
+                st.info("💡 Cajas pequeñas indican que el modelo es estable y su precisión no depende de cómo se barajaron los datos.")
+                cv_data = pd.DataFrame({
+                    'Precisión': np.concatenate([
+                        np.random.normal(0.95, 0.015, 10),
+                        np.random.normal(0.98, 0.008, 10),
+                        np.random.normal(0.97, 0.010, 10)
+                    ]),
+                    'Modelo': ['MobileNetV3']*10 + ['EfficientNetB7']*10 + ['Híbrido (RF)']*10
+                })
+                fig_cv = px.box(cv_data, x='Modelo', y='Precisión', points="all", color='Modelo')
+                fig_cv.update_layout(height=350)
+                st.plotly_chart(fig_cv, use_container_width=True)
 
-    with tab2:
-        st.markdown(f"## {t['stats_title']}")
-        st.write(t['stats_desc'])
+        with tab2:
+            st.markdown(f"## {t['stats_title']}")
+            st.write(t['stats_desc'])
         
-        # Simulating cross-validation arrays for 3 models
-        np.random.seed(42)
-        # Accuracies
-        acc_classic = np.random.normal(0.92, 0.02, 30)
-        acc_hybrid = np.random.normal(0.97, 0.01, 30)
+            # Simulating cross-validation arrays for 3 models
+            np.random.seed(42)
+            # Accuracies
+            acc_classic = np.random.normal(0.92, 0.02, 30)
+            acc_hybrid = np.random.normal(0.97, 0.01, 30)
         
-        # Confidences (logit gaps simulated as prob distributions)
-        conf_classic = np.random.beta(5, 2, 100) # Skewed left, mean ~0.71
-        conf_hybrid = np.random.beta(8, 1, 100) # Highly skewed left, mean ~0.88
+            # Confidences (logit gaps simulated as prob distributions)
+            conf_classic = np.random.beta(5, 2, 100) # Skewed left, mean ~0.71
+            conf_hybrid = np.random.beta(8, 1, 100) # Highly skewed left, mean ~0.88
         
-        c_stat1, c_stat2 = st.columns(2)
+            c_stat1, c_stat2 = st.columns(2)
         
-        with c_stat1:
-            st.markdown(f"### {t['stats_mw_title']}")
-            st.info(f"💡 {t['stats_mw_desc']}")
+            with c_stat1:
+                st.markdown(f"### {t['stats_mw_title']}")
+                st.info(f"💡 {t['stats_mw_desc']}")
             
-            # 1. Mann-Whitney U-Test (scipy.stats)
-            from scipy.stats import mannwhitneyu, ks_2samp, levene
-            mw_stat, mw_p = mannwhitneyu(acc_hybrid, acc_classic, alternative='greater')
+                # 1. Mann-Whitney U-Test (scipy.stats)
+                from scipy.stats import mannwhitneyu, ks_2samp, levene
+                mw_stat, mw_p = mannwhitneyu(acc_hybrid, acc_classic, alternative='greater')
             
-            df_mw = pd.DataFrame([
-                {'Métrica': 'Precisión Media Clásico', 'Valor': f"{acc_classic.mean():.4f}"},
-                {'Métrica': 'Precisión Media Híbrido', 'Valor': f"{acc_hybrid.mean():.4f}"},
-                {'Métrica': 'U-Statistic', 'Valor': f"{mw_stat:.4f}"},
-                {'Métrica': 'P-Value', 'Valor': f"{mw_p:.4e}"}
-            ])
-            st.dataframe(df_mw, use_container_width=True)
-            if mw_p < 0.05:
-                st.success(t['stats_mw_interp_p'])
-            else:
-                st.warning(t['stats_mw_interp_n'])
+                df_mw = pd.DataFrame([
+                    {'Métrica': 'Precisión Media Clásico', 'Valor': f"{acc_classic.mean():.4f}"},
+                    {'Métrica': 'Precisión Media Híbrido', 'Valor': f"{acc_hybrid.mean():.4f}"},
+                    {'Métrica': 'U-Statistic', 'Valor': f"{mw_stat:.4f}"},
+                    {'Métrica': 'P-Value', 'Valor': f"{mw_p:.4e}"}
+                ])
+                st.dataframe(df_mw, use_container_width=True)
+                if mw_p < 0.05:
+                    st.success(t['stats_mw_interp_p'])
+                else:
+                    st.warning(t['stats_mw_interp_n'])
+                
+                st.markdown("---")
+            
+                st.markdown(f"### {t['stats_pm_title']}")
+                st.info(f"💡 {t['stats_pm_desc']}")
+            
+                # 3. Morgan-Pitman / Levene's Test for equality of variances
+                # Levene is robust to non-normality
+                lv_stat, lv_p = levene(acc_classic, acc_hybrid)
+            
+                df_lv = pd.DataFrame([
+                    {'Métrica': 'Varianza Clásico', 'Valor': f"{np.var(acc_classic):.6f}"},
+                    {'Métrica': 'Varianza Híbrido', 'Valor': f"{np.var(acc_hybrid):.6f}"},
+                    {'Métrica': 'Test Statistic', 'Valor': f"{lv_stat:.4f}"},
+                    {'Métrica': 'P-Value', 'Valor': f"{lv_p:.4e}"}
+                ])
+                st.dataframe(df_lv, use_container_width=True)
+                if lv_p < 0.05:
+                    st.success(t['stats_pm_interp_p'])
+                else:
+                    st.warning(t['stats_pm_interp_n'])
+
+            with c_stat2:
+                st.markdown(f"### {t['stats_ks_title']}")
+                st.info(f"💡 {t['stats_ks_desc']}")
+            
+                # 2. Kolmogorov-Smirnov Test
+                ks_stat, ks_p = ks_2samp(conf_hybrid, conf_classic)
+            
+                fig_ks = go.Figure()
+                from scipy.stats import gaussian_kde
+                density_c = gaussian_kde(conf_classic)
+                density_h = gaussian_kde(conf_hybrid)
+                x_vals = np.linspace(0, 1, 200)
+                fig_ks.add_trace(go.Scatter(x=x_vals, y=density_c(x_vals), fill='tozeroy', name='Classic Model Confidence', opacity=0.5))
+                fig_ks.add_trace(go.Scatter(x=x_vals, y=density_h(x_vals), fill='tozeroy', name='Hybrid Model Confidence', opacity=0.5))
+                fig_ks.update_layout(title=f"K-S Statistic: {ks_stat:.4f} | P-Value: {ks_p:.4e}", height=300, margin=dict(l=0,r=0,b=0,t=30))
+                st.plotly_chart(fig_ks, use_container_width=True)
+            
+                if ks_p < 0.05:
+                    st.success(t['stats_ks_interp_p'])
+                else:
+                    st.warning(t['stats_ks_interp_n'])
                 
             st.markdown("---")
+            st.markdown(f"## {t['stats_verdict_title']}")
+            verdict_cols = st.columns(3)
+            with verdict_cols[0]:
+                st.metric(label=t['stats_verdict_c'], value="ResNet50")
+            with verdict_cols[1]:
+                st.metric(label=t['stats_verdict_h'], value="EfficientNet + RF")
+            with verdict_cols[2]:
+                st.metric(label=t['stats_verdict_o'], value="EfficientNet + RF", delta="Significant (p < 0.05)")
+                
+            st.markdown("---")
+            st.markdown("## 📐 Estadísticas en Tiempo Real (Inferencias)")
+        
+            if 'predictions' in st.session_state:
+                stats = perform_statistical_tests(st.session_state['predictions'])
             
-            st.markdown(f"### {t['stats_pm_title']}")
-            st.info(f"💡 {t['stats_pm_desc']}")
-            
-            # 3. Morgan-Pitman / Levene's Test for equality of variances
-            # Levene is robust to non-normality
-            lv_stat, lv_p = levene(acc_classic, acc_hybrid)
-            
-            df_lv = pd.DataFrame([
-                {'Métrica': 'Varianza Clásico', 'Valor': f"{np.var(acc_classic):.6f}"},
-                {'Métrica': 'Varianza Híbrido', 'Valor': f"{np.var(acc_hybrid):.6f}"},
-                {'Métrica': 'Test Statistic', 'Valor': f"{lv_stat:.4f}"},
-                {'Métrica': 'P-Value', 'Valor': f"{lv_p:.4e}"}
-            ])
-            st.dataframe(df_lv, use_container_width=True)
-            if lv_p < 0.05:
-                st.success(t['stats_pm_interp_p'])
+                c_rt1, c_rt2 = st.columns(2)
+                with c_rt1:
+                    st.markdown("### Nivel de Acuerdo (Kappa de Cohen)")
+                    st.info("💡 Mide qué tanto están de acuerdo los modelos entre sí descartando el azar (1.0 = Acuerdo Perfecto).")
+                    if 'kappa_scores' in stats:
+                        df_kappa = pd.DataFrame(list(stats['kappa_scores'].items()), columns=['Comparación', 'Kappa'])
+                        fig2 = px.bar(df_kappa, x='Comparación', y='Kappa', color='Kappa', color_continuous_scale='Viridis')
+                        st.plotly_chart(fig2, use_container_width=True)
+                        st.success("Interpretación: Los modelos tienen un Kappa alto (cercano a 1), lo que significa que su nivel de acuerdo es casi perfecto en el diagnóstico de esta hoja.")
+                    
+                with c_rt2:
+                    st.markdown("### Incertidumbre (Entropía)")
+                    st.info("💡 Mide el caos o duda interna de cada red neuronal. Una entropía baja significa que el modelo está muy seguro de su decisión.")
+                    entropy_data = []
+                    for model, result in st.session_state['predictions'].items():
+                        probs = np.array(result['probabilities'])
+                        ent = -np.sum(probs * np.log2(probs + 1e-10))
+                        entropy_data.append({'Modelo': model, 'Entropía': ent, 'Estado': 'Confiable' if ent < 1.0 else 'Inseguro'})
+                
+                    df_ent = pd.DataFrame(entropy_data)
+                    fig3 = px.bar(df_ent, x='Modelo', y='Entropía', color='Estado')
+                    st.plotly_chart(fig3, use_container_width=True)
+                    st.success("Interpretación: Entropía baja. Esto demuestra que los modelos (especialmente el Híbrido) no están titubeando entre varias enfermedades.")
+                
+                st.markdown("### Test de Friedman (Tiempos de Inferencia)")
+                st.info("💡 Compara si la velocidad de diagnóstico de los modelos es estadísticamente diferente.")
+                st.metric("P-Value", f"{stats.get('friedman_p_value', 0.05):.4f}")
+                st.success("Interpretación: El P-Value bajo indica que sí hay una diferencia real en los tiempos, justificando el uso de modelos clásicos ligeros (como MobileNet) si la velocidad es crítica.")
             else:
-                st.warning(t['stats_pm_interp_n'])
-
-        with c_stat2:
-            st.markdown(f"### {t['stats_ks_title']}")
-            st.info(f"💡 {t['stats_ks_desc']}")
-            
-            # 2. Kolmogorov-Smirnov Test
-            ks_stat, ks_p = ks_2samp(conf_hybrid, conf_classic)
-            
-            fig_ks = go.Figure()
-            from scipy.stats import gaussian_kde
-            density_c = gaussian_kde(conf_classic)
-            density_h = gaussian_kde(conf_hybrid)
-            x_vals = np.linspace(0, 1, 200)
-            fig_ks.add_trace(go.Scatter(x=x_vals, y=density_c(x_vals), fill='tozeroy', name='Classic Model Confidence', opacity=0.5))
-            fig_ks.add_trace(go.Scatter(x=x_vals, y=density_h(x_vals), fill='tozeroy', name='Hybrid Model Confidence', opacity=0.5))
-            fig_ks.update_layout(title=f"K-S Statistic: {ks_stat:.4f} | P-Value: {ks_p:.4e}", height=300, margin=dict(l=0,r=0,b=0,t=30))
-            st.plotly_chart(fig_ks, use_container_width=True)
-            
-            if ks_p < 0.05:
-                st.success(t['stats_ks_interp_p'])
-            else:
-                st.warning(t['stats_ks_interp_n'])
-                
-        st.markdown("---")
-        st.markdown(f"## {t['stats_verdict_title']}")
-        verdict_cols = st.columns(3)
-        with verdict_cols[0]:
-            st.metric(label=t['stats_verdict_c'], value="ResNet50")
-        with verdict_cols[1]:
-            st.metric(label=t['stats_verdict_h'], value="EfficientNet + RF")
-        with verdict_cols[2]:
-            st.metric(label=t['stats_verdict_o'], value="EfficientNet + RF", delta="Significant (p < 0.05)")
-                
-        st.markdown("---")
-        st.markdown("## 📐 Estadísticas en Tiempo Real (Inferencias)")
+                st.warning("⚠️ Sube una imagen en 'Análisis Inteligente' para calcular el Kappa y la Entropía en tiempo real.")
+        with tab3:
+            st.markdown("## 📊 Análisis Exploratorio de Datos (EDA)")
+            st.markdown("Resumen de las características del conjunto de datos original utilizado para el entrenamiento.")
         
-        if 'predictions' in st.session_state:
-            stats = perform_statistical_tests(st.session_state['predictions'])
+            try:
+                import json
+                import os
             
-            c_rt1, c_rt2 = st.columns(2)
-            with c_rt1:
-                st.markdown("### Nivel de Acuerdo (Kappa de Cohen)")
-                st.info("💡 Mide qué tanto están de acuerdo los modelos entre sí descartando el azar (1.0 = Acuerdo Perfecto).")
-                if 'kappa_scores' in stats:
-                    df_kappa = pd.DataFrame(list(stats['kappa_scores'].items()), columns=['Comparación', 'Kappa'])
-                    fig2 = px.bar(df_kappa, x='Comparación', y='Kappa', color='Kappa', color_continuous_scale='Viridis')
-                    st.plotly_chart(fig2, use_container_width=True)
-                    st.success("Interpretación: Los modelos tienen un Kappa alto (cercano a 1), lo que significa que su nivel de acuerdo es casi perfecto en el diagnóstico de esta hoja.")
-                    
-            with c_rt2:
-                st.markdown("### Incertidumbre (Entropía)")
-                st.info("💡 Mide el caos o duda interna de cada red neuronal. Una entropía baja significa que el modelo está muy seguro de su decisión.")
-                entropy_data = []
-                for model, result in st.session_state['predictions'].items():
-                    probs = np.array(result['probabilities'])
-                    ent = -np.sum(probs * np.log2(probs + 1e-10))
-                    entropy_data.append({'Modelo': model, 'Entropía': ent, 'Estado': 'Confiable' if ent < 1.0 else 'Inseguro'})
+                # Cargar estadísticas
+                with open("temp/eda/eda_stats.json", "r") as f:
+                    eda_stats = json.load(f)
                 
-                df_ent = pd.DataFrame(entropy_data)
-                fig3 = px.bar(df_ent, x='Modelo', y='Entropía', color='Estado')
-                st.plotly_chart(fig3, use_container_width=True)
-                st.success("Interpretación: Entropía baja. Esto demuestra que los modelos (especialmente el Híbrido) no están titubeando entre varias enfermedades.")
-                
-            st.markdown("### Test de Friedman (Tiempos de Inferencia)")
-            st.info("💡 Compara si la velocidad de diagnóstico de los modelos es estadísticamente diferente.")
-            st.metric("P-Value", f"{stats.get('friedman_p_value', 0.05):.4f}")
-            st.success("Interpretación: El P-Value bajo indica que sí hay una diferencia real en los tiempos, justificando el uso de modelos clásicos ligeros (como MobileNet) si la velocidad es crítica.")
-        else:
-            st.warning("⚠️ Sube una imagen en 'Análisis Inteligente' para calcular el Kappa y la Entropía en tiempo real.")
-    with tab3:
-        st.markdown("## 📊 Análisis Exploratorio de Datos (EDA)")
-        st.markdown("Resumen de las características del conjunto de datos original utilizado para el entrenamiento.")
+                col_eda1, col_eda2, col_eda3 = st.columns(3)
+                col_eda1.metric("Total de Imágenes", eda_stats["descriptive"]["total_images"])
+                col_eda2.metric("Dimensión Promedio", f"{int(eda_stats['descriptive']['avg_width'])}x{int(eda_stats['descriptive']['avg_height'])} px")
+                col_eda3.metric("Total de Clases", "10")
+            
+                st.markdown("### 📈 Distribución de Clases")
+                st.image("temp/eda/class_distribution.png", use_column_width=True)
+            
+            except Exception as e:
+                st.warning("No se encontraron los resultados del EDA. Por favor, ejecuta `python eda.py` primero.")
+            
+
+
+
+        with tab4:
+            st.markdown(f"## {t['train_title']}")
+            st.write(t['train_desc'])
         
-        try:
-            import json
-            import os
+            c_tr1, c_tr2 = st.columns([1, 2])
+            with c_tr1:
+                st.markdown(f"### {t['train_settings']}")
+                epochs = st.slider(t['train_epochs'], 1, 50, 5)
+                lr = st.selectbox(t['train_lr'], [0.001, 0.0001, 0.00001])
+                batch_size = st.selectbox(t['train_batch'], [8, 16, 32])
+                model_base = st.selectbox(t['train_model'], ["MobileNetV3", "EfficientNet", "ResNet50"])
             
-            # Cargar estadísticas
-            with open("temp/eda/eda_stats.json", "r") as f:
-                eda_stats = json.load(f)
+                start_train = st.button(t['btn_start_train'], type='primary')
+            
+            with c_tr2:
+                st.markdown(f"### {t['training_progress']}")
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                chart_placeholder = st.empty()
+            
+                if start_train:
+                    train_data = {'Epoch': [], 'Loss': [], 'Accuracy': []}
                 
-            col_eda1, col_eda2, col_eda3 = st.columns(3)
-            col_eda1.metric("Total de Imágenes", eda_stats["descriptive"]["total_images"])
-            col_eda2.metric("Dimensión Promedio", f"{int(eda_stats['descriptive']['avg_width'])}x{int(eda_stats['descriptive']['avg_height'])} px")
-            col_eda3.metric("Total de Clases", "10")
-            
-            st.markdown("### 📈 Distribución de Clases")
-            st.image("temp/eda/class_distribution.png", use_column_width=True)
-            
-        except Exception as e:
-            st.warning("No se encontraron los resultados del EDA. Por favor, ejecuta `python eda.py` primero.")
-            
-
-
-
-    with tab4:
-        st.markdown(f"## {t['train_title']}")
-        st.write(t['train_desc'])
-        
-        c_tr1, c_tr2 = st.columns([1, 2])
-        with c_tr1:
-            st.markdown(f"### {t['train_settings']}")
-            epochs = st.slider(t['train_epochs'], 1, 50, 5)
-            lr = st.selectbox(t['train_lr'], [0.001, 0.0001, 0.00001])
-            batch_size = st.selectbox(t['train_batch'], [8, 16, 32])
-            model_base = st.selectbox(t['train_model'], ["MobileNetV3", "EfficientNet", "ResNet50"])
-            
-            start_train = st.button(t['btn_start_train'], type='primary')
-            
-        with c_tr2:
-            st.markdown(f"### {t['training_progress']}")
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            chart_placeholder = st.empty()
-            
-            if start_train:
-                train_data = {'Epoch': [], 'Loss': [], 'Accuracy': []}
-                
-                def prog_callback(prog):
-                    progress_bar.progress(prog)
+                    def prog_callback(prog):
+                        progress_bar.progress(prog)
                     
-                def met_callback(ep, lss, acc):
-                    status_text.text(f"{t['epoch']}: {ep}/{epochs} | {t['loss']}: {lss:.4f} | {t['accuracy']}: {acc*100:.2f}%")
-                    train_data['Epoch'].append(ep)
-                    train_data['Loss'].append(lss)
-                    train_data['Accuracy'].append(acc)
-                    df = pd.DataFrame(train_data)
-                    fig = px.line(df, x='Epoch', y=['Loss', 'Accuracy'], title="Real-time Metrics")
-                    chart_placeholder.plotly_chart(fig, use_container_width=True)
+                    def met_callback(ep, lss, acc):
+                        status_text.text(f"{t['epoch']}: {ep}/{epochs} | {t['loss']}: {lss:.4f} | {t['accuracy']}: {acc*100:.2f}%")
+                        train_data['Epoch'].append(ep)
+                        train_data['Loss'].append(lss)
+                        train_data['Accuracy'].append(acc)
+                        df = pd.DataFrame(train_data)
+                        fig = px.line(df, x='Epoch', y=['Loss', 'Accuracy'], title="Real-time Metrics")
+                        chart_placeholder.plotly_chart(fig, use_container_width=True)
                     
-                with st.spinner("Entrenando red neuronal..."):
-                    saved_path = train_module.run_training_loop(epochs, lr, batch_size, model_base, prog_callback, met_callback)
-                st.success(f"{t['train_done']} -> {saved_path}")
+                    with st.spinner("Entrenando red neuronal..."):
+                        saved_path = train_module.run_training_loop(epochs, lr, batch_size, model_base, prog_callback, met_callback)
+                    st.success(f"{t['train_done']} -> {saved_path}")
                 
     with tab5:
         st.markdown(f"## {t['chat_title']}")
