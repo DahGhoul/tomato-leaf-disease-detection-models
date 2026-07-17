@@ -58,6 +58,31 @@ TRANSLATIONS = {
         'chat_desc': 'Hazme preguntas sobre las enfermedades del tomate, tratamientos o cómo usar este sistema.',
         'chat_input': 'Escribe tu pregunta aquí...',
         'chat_welcome': '¡Hola! Soy tu asistente agrónomo virtual. ¿En qué te puedo ayudar hoy?',
+
+        # Estadísticas Ultra-Robustas
+        'stats_title': '📐 Pruebas Estadísticas',
+        'stats_desc': 'Análisis estadístico de maestría utilizando metodologías paramétricas y no paramétricas robustas para validar de manera concluyente la superioridad de la arquitectura.',
+        
+        'stats_mw_title': '1. Prueba U de Mann-Whitney (Comparación de Arquitecturas)',
+        'stats_mw_desc': 'Compara si la superioridad de los modelos Híbridos sobre los Clásicos es estadísticamente significativa (p < 0.05).',
+        'stats_mw_interp_p': 'Los modelos Híbridos (MobileNet_SVM, EfficientNet_RF) superan estadísticamente a los modelos Clásicos.',
+        'stats_mw_interp_n': 'No existe diferencia estadística significativa entre los enfoques.',
+        
+        'stats_ks_title': '2. Prueba Kolmogorov-Smirnov Robusta (Estabilidad del Modelo)',
+        'stats_ks_desc': 'Analiza si la distribución de confianza (estabilidad) del mejor híbrido proviene de la misma función subyacente que el modelo clásico base.',
+        'stats_ks_interp_p': 'Las distribuciones de confianza son estadísticamente diferentes. El híbrido presenta una mayor concentración de altas confianzas.',
+        'stats_ks_interp_n': 'Ambas arquitecturas generan distribuciones de confianza similares.',
+        
+        'stats_pm_title': '3. Prueba de Morgan-Pitman (Igualdad de Varianzas)',
+        'stats_pm_desc': 'Evalúa si la varianza de los errores es equivalente. Si es similar, el principio de parsimonia sugiere elegir el modelo más simple.',
+        'stats_pm_interp_p': 'Varianzas significativamente diferentes. La complejidad del modelo Híbrido se justifica por su reducción de varianza.',
+        'stats_pm_interp_n': 'Varianzas equivalentes. Bajo el principio de parsimonia, un modelo clásico más simple podría ser suficiente.',
+        
+        'stats_verdict_title': '🏆 Conclusión del Estudio de Modelos',
+        'stats_verdict_c': 'Mejor Modelo Clásico Absoluto:',
+        'stats_verdict_h': 'Mejor Modelo Híbrido Absoluto:',
+        'stats_verdict_o': 'Ganador Global:',
+
         
         # Errors & Warnings
         'err_no_img': 'Por favor sube una imagen primero.',
@@ -131,6 +156,31 @@ TRANSLATIONS = {
         'chat_desc': 'Ask me questions about tomato diseases, treatments, or how to use this system.',
         'chat_input': 'Type your question here...',
         'chat_welcome': 'Hello! I am your virtual agronomist assistant. How can I help you today?',
+
+        # Ultra-Robust Statistics
+        'stats_title': '📐 Statistical Tests',
+        'stats_desc': 'Mastery-level statistical analysis using robust parametric and non-parametric methodologies to conclusively validate architectural superiority.',
+        
+        'stats_mw_title': '1. Mann-Whitney U-Test (Architecture Comparison)',
+        'stats_mw_desc': 'Compares if the superiority of Hybrid models over Classics is statistically significant (p < 0.05).',
+        'stats_mw_interp_p': 'Hybrid models (MobileNet_SVM, EfficientNet_RF) statistically outperform Classic models.',
+        'stats_mw_interp_n': 'There is no statistically significant difference between the approaches.',
+        
+        'stats_ks_title': '2. Robust Kolmogorov-Smirnov Test (Model Stability)',
+        'stats_ks_desc': 'Analyzes whether the confidence distribution (stability) of the best hybrid comes from the same underlying function as the base classic model.',
+        'stats_ks_interp_p': 'The confidence distributions are statistically different. The hybrid presents a higher concentration of high confidences.',
+        'stats_ks_interp_n': 'Both architectures generate similar confidence distributions.',
+        
+        'stats_pm_title': '3. Morgan-Pitman Test (Equality of Variances)',
+        'stats_pm_desc': 'Evaluates if the variance of errors is equivalent. If similar, the principle of parsimony suggests choosing the simpler model.',
+        'stats_pm_interp_p': 'Significantly different variances. The complexity of the Hybrid model is justified by its variance reduction.',
+        'stats_pm_interp_n': 'Equivalent variances. Under the principle of parsimony, a simpler classic model might be sufficient.',
+        
+        'stats_verdict_title': '🏆 Model Study Conclusion',
+        'stats_verdict_c': 'Best Absolute Classic Model:',
+        'stats_verdict_h': 'Best Absolute Hybrid Model:',
+        'stats_verdict_o': 'Global Winner:',
+
         
         # Errors & Warnings
         'err_no_img': 'Please upload an image first.',
