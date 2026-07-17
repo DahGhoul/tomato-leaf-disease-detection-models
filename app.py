@@ -1295,7 +1295,6 @@ def main():
             st.markdown("### 📈 Historial de Entrenamiento (Accuracy vs Loss)")
             st.info("💡 **Curvas de Aprendizaje:** Demuestra que el modelo convergió correctamente sin sufrir de *Overfitting* (sobreajuste).")
             # Simulated training history
-            import numpy as np
             epochs = np.arange(1, 21)
             train_acc = 1 - np.exp(-0.3 * epochs) + np.random.normal(0, 0.01, 20)
             val_acc = 1 - np.exp(-0.25 * epochs) + np.random.normal(0, 0.01, 20)
