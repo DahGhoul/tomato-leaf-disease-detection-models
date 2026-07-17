@@ -1248,6 +1248,20 @@ def main():
                             st.caption("Los mapas de calor no están disponibles para modelos híbridos.")
                         st.markdown("---")
                         
+                st.markdown(f"### 📊 Validación Estadística (Foto Actual)")
+                st.info("Esta sección mide matemáticamente el nivel de acuerdo entre los modelos para asegurar que el diagnóstico de ESTA hoja en particular es confiable.")
+                stats = perform_statistical_tests(preds)
+                
+                st.write(f"**Confianza Media Global:** {stats['mean_confidence']:.2f}%")
+                st.write(f"**Varianza (Inestabilidad):** {stats['variance']:.4f}")
+                
+                if stats['variance'] > 100:
+                    st.warning("⚠️ Alta varianza detectada: Los modelos discrepan significativamente. El diagnóstico final tiene alto margen de error.")
+                else:
+                    st.success("✅ Baja varianza: Hay consenso total entre los modelos. El diagnóstico es estadísticamente altamente confiable.")
+                
+                st.markdown("---")
+                
                 # Botones de exportación
                 st.markdown(f"### {t['export_title']}")
                 stat_res = perform_statistical_tests(preds)
