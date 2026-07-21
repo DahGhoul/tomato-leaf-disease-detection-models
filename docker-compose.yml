@@ -1,24 +1,20 @@
-version: '3.8'
-
 services:
   api:
     build: .
-    command: uvicorn api:app --host 0.0.0.0 --port 8000
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 7860
     ports:
-      - "8000:8000"
+      - "7860:7860"
     volumes:
       - .:/app
     environment:
       - PYTHONUNBUFFERED=1
 
-  web:
-    build: .
-    command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+  frontend:
+    image: node:20
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     ports:
-      - "8501:8501"
+      - "5173:5173"
     volumes:
-      - .:/app
-    environment:
-      - PYTHONUNBUFFERED=1
-    depends_on:
-      - api
+      - ./frontend:/app
+      - /app/node_modules
